@@ -3,6 +3,8 @@ import { DEFAULT_KEYWORDS } from "@/config/keywords";
 import { DEFAULT_THRESHOLDS } from "@/config/thresholds";
 import { runLeadSearchPipeline } from "@/lib/pipeline";
 
+export const maxDuration = 120;
+
 export async function GET(request: Request) {
   try {
     const { env } = await import("@/lib/env");
@@ -20,6 +22,7 @@ export async function GET(request: Request) {
       lcp: DEFAULT_THRESHOLDS.lcp,
       cls: DEFAULT_THRESHOLDS.cls,
       tbt: DEFAULT_THRESHOLDS.tbt,
+      maxDomains: 10,
       email: env.REPORT_EMAIL,
     });
 

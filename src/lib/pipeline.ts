@@ -77,7 +77,11 @@ export async function runLeadSearchPipeline(
   diagnostics.uniqueDomains = queue.length;
 
   // Run PageSpeed analysis with rate limiting
-  const pageSpeedMap = await analyzeUrlsWithRateLimit(queue);
+  const maxDomains = input.maxDomains ?? 10;
+  if (queue.length > maxDomains) {
+    diagnostics.messages.push(`Capped PageSpeed analysis at ${maxDomains} domains out of ${queue.length} found`);
+  }
+  const pageSpeedMap = await analyzeUrlsWithRateLimit(queue, maxDomains);
   diagnostics.pageSpeedResults = pageSpeedMap.size;
   diagnostics.pageSpeedFailures = queue.length - pageSpeedMap.size;
 

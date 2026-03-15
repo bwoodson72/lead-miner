@@ -138,6 +138,24 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         </div>
       </div>
 
+      {/* Max Domains */}
+      <div>
+        <label htmlFor="maxDomains" className="block mb-1.5 text-sm font-medium text-zinc-300">
+          Max Domains to Analyze
+        </label>
+        <input
+          id="maxDomains"
+          type="number"
+          min={1}
+          max={20}
+          {...register("maxDomains", { valueAsNumber: true })}
+          className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        {errors.maxDomains && (
+          <p className="mt-1 text-xs text-red-400">{errors.maxDomains.message}</p>
+        )}
+      </div>
+
       {/* Email */}
       <div>
         <label htmlFor="email" className="block mb-1.5 text-sm font-medium text-zinc-300">

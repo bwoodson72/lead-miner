@@ -75,19 +75,21 @@ async function queryGoogleSearch(apiKey: string, keyword: string, location?: str
     if (serpAd) results.push(serpAd);
   }
 
-  // Source C: Local pack results (3-pack) — website is at result.links.website
-  const localResults = Array.isArray(data.local_results) ? data.local_results : [];
-  const withWebsites = localResults.filter(
-    (r: Record<string, unknown>) => {
-      const links = r.links as Record<string, string> | undefined;
-      return typeof links?.website === "string" && links.website.length > 0;
-    }
-  );
-  console.log("[SerpApi] Local pack:", localResults.length, "| With websites:", withWebsites.length);
+  // Source C: Local pack results (3-pack) — may be array or object with places
+  let localResultsArray: Record<string, unknown>[] = [];
+  if (Array.isArray(data.local_results)) {
+    localResultsArray = data.local_results;
+  } else if (data.local_results?.places && Array.isArray(data.local_results.places)) {
+    localResultsArray = data.local_results.places;
+  }
+  const withWebsites = localResultsArray.filter((r) => {
+    const links = r.links as Record<string, string> | undefined;
+    return typeof links?.website === "string" && links.website.length > 0;
+  });
+  console.log("[SerpApi] Local pack:", localResultsArray.length, "| With websites:", withWebsites.length);
   for (const result of withWebsites) {
-    const r = result as Record<string, unknown>;
-    const links = r.links as Record<string, string>;
-    const serpAd = buildSerpAd(keyword, (r.title as string) || "", links.website, links.website);
+    const links = result.links as Record<string, string>;
+    const serpAd = buildSerpAd(keyword, (result.title as string) || "", links.website, links.website);
     if (serpAd) results.push(serpAd);
   }
 

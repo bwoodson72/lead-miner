@@ -6,6 +6,7 @@ export const KeywordInputSchema = z.object({
   lcp: z.number().default(4000),
   cls: z.number().default(0.25),
   tbt: z.number().default(300),
+  maxDomains: z.number().min(1).max(20).default(10),
   email: z.string().email(),
 });
 
