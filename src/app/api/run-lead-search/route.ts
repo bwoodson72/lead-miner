@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { KeywordInputSchema } from "@/lib/schemas";
 import { runLeadSearchPipeline } from "@/lib/pipeline";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {

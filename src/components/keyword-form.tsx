@@ -42,8 +42,23 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
+
+      if (!res.ok) {
+        let errorMessage = "Request failed with status " + res.status;
+        try {
+          const json = await res.json();
+          if (json.error) errorMessage = json.error;
+        } catch {
+          if (res.status === 504 || res.status === 408) {
+            errorMessage = "Request timed out. Try reducing the number of keywords or max domains.";
+          }
+        }
+        setErrorMsg(errorMessage);
+        return;
+      }
+
       const json = await res.json();
-      if (!res.ok || !json.success) {
+      if (!json.success) {
         setErrorMsg(json.error ?? "An unexpected error occurred.");
       } else {
         onResults({ leads: json.leads, keywords: json.keywords, diagnostics: json.diagnostics });

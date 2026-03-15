@@ -17,7 +17,7 @@ export async function analyzeUrl(url: string): Promise<PageSpeedResult | null> {
     });
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 45000);
 
     console.log("[PageSpeed] Analyzing:", url);
     const startTime = Date.now();
@@ -33,14 +33,14 @@ export async function analyzeUrl(url: string): Promise<PageSpeedResult | null> {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
     if (!data.lighthouseResult) {
-      console.error("[PageSpeed] No lighthouseResult for:", url, "Response keys:", Object.keys(data));
+      console.error("[PageSpeed] No lighthouseResult for:", url, "keys:", Object.keys(data));
       return null;
     }
 
     const audits = data.lighthouseResult.audits;
     const categories = data.lighthouseResult.categories;
 
-    const result = {
+    const result: PageSpeedResult = {
       performanceScore: Math.round(categories.performance.score * 100),
       lcp: audits["largest-contentful-paint"].numericValue,
       cls: audits["cumulative-layout-shift"].numericValue,
@@ -48,11 +48,11 @@ export async function analyzeUrl(url: string): Promise<PageSpeedResult | null> {
       url,
     };
 
-    console.log("[PageSpeed] Done:", url, "Score:", result.performanceScore, "Time:", elapsed + "s");
+    console.log("[PageSpeed] Done:", url, "Score:", result.performanceScore, "(" + elapsed + "s)");
     return result;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
-      console.warn("[PageSpeed] Timeout (30s) for:", url);
+      console.warn("[PageSpeed] Timeout (45s) for:", url);
     } else {
       console.error("[PageSpeed] Failed for:", url, err);
     }
@@ -60,27 +60,44 @@ export async function analyzeUrl(url: string): Promise<PageSpeedResult | null> {
   }
 }
 
-export async function analyzeUrlsWithRateLimit(
-  urls: { url: string; domain: string; keyword: string }[],
-  maxDomains: number = 10,
-  delayMs: number = 500
-): Promise<Map<string, PageSpeedResult>> {
-  const results = new Map<string, PageSpeedResult>();
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = [];
+  let index = 0;
 
-  const toAnalyze = urls.slice(0, maxDomains);
-  console.log("[PageSpeed] Analyzing", toAnalyze.length, "of", urls.length, "domains (max:", maxDomains + ")");
-
-  for (let i = 0; i < toAnalyze.length; i++) {
-    const entry = toAnalyze[i];
-    const result = await analyzeUrl(entry.url);
-    if (result !== null) {
-      results.set(entry.domain, result);
-    }
-    if (i < toAnalyze.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+  async function worker() {
+    while (index < tasks.length) {
+      const currentIndex = index++;
+      results[currentIndex] = await tasks[currentIndex]();
     }
   }
 
-  console.log("[PageSpeed] Completed:", results.size, "successful out of", toAnalyze.length, "attempted");
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  await Promise.all(workers);
   return results;
+}
+
+export async function analyzeUrlsWithRateLimit(
+  urls: { url: string; domain: string; keyword: string }[],
+  maxDomains: number = 5,
+  concurrency: number = 3
+): Promise<Map<string, PageSpeedResult>> {
+  const toAnalyze = urls.slice(0, maxDomains);
+  console.log("[PageSpeed] Analyzing", toAnalyze.length, "of", urls.length, "domains (max:", maxDomains, "concurrency:", concurrency + ")");
+
+  const tasks = toAnalyze.map((entry) => () => analyzeUrl(entry.url));
+  const results = await runWithConcurrency(tasks, concurrency);
+
+  const map = new Map<string, PageSpeedResult>();
+  for (let i = 0; i < toAnalyze.length; i++) {
+    const result = results[i];
+    if (result !== null) {
+      map.set(toAnalyze[i].domain, result);
+    }
+  }
+
+  console.log("[PageSpeed] Completed:", map.size, "of", toAnalyze.length, "successful");
+  return map;
 }
