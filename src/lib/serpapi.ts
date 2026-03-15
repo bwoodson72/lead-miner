@@ -3,85 +3,148 @@ import { SerpAdSchema, type SerpAd } from "./schemas";
 export async function searchAds(keyword: string, location?: string): Promise<SerpAd[]> {
   try {
     const { env } = await import("./env");
-
-    const params = new URLSearchParams({
-      engine: "google",
-      q: keyword,
-      api_key: env.SERPAPI_KEY,
-    });
-    if (location) {
-      params.set("location", location);
-    }
-
-    console.log("[SerpApi] Searching for:", keyword, location ? "(location: " + location + ")" : "(no location)");
-
-    const response = await fetch("https://serpapi.com/search.json?" + params.toString());
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("[SerpApi] HTTP error:", response.status, text.slice(0, 300));
-      return [];
-    }
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error("[SerpApi] API error:", data.error);
-      return [];
-    }
-
-    console.log("[SerpApi] Response keys:", Object.keys(data));
-
     const results: SerpAd[] = [];
 
-    // PRIORITY 1: Traditional text ads (data.ads)
-    const textAds = Array.isArray(data.ads) ? data.ads : [];
-    console.log("[SerpApi] Text ads found:", textAds.length);
+    // PHASE 1: Regular Google Search (gets text ads + local 3-pack)
+    const searchResults = await queryGoogleSearch(env.SERPAPI_KEY, keyword, location);
+    results.push(...searchResults);
+    console.log("[SerpApi] Phase 1 (Google Search) results:", searchResults.length);
 
-    for (const ad of textAds) {
-      const serpAd = buildSerpAd(keyword, ad.title, ad.link, ad.displayed_link);
-      if (serpAd) results.push(serpAd);
+    // PHASE 2: Google Local engine (gets 10-20+ local businesses)
+    const localResults = await queryGoogleLocal(env.SERPAPI_KEY, keyword, location);
+    console.log("[SerpApi] Phase 2 (Google Local) results:", localResults.length);
+
+    // Merge, dedup by domain
+    const seenDomains = new Set<string>();
+    const deduped: SerpAd[] = [];
+    for (const ad of [...results, ...localResults]) {
+      const domain = ad.displayDomain.toLowerCase();
+      if (seenDomains.has(domain)) continue;
+      seenDomains.add(domain);
+      deduped.push(ad);
     }
 
-    // PRIORITY 2: Local service ads (data.local_ads?.ads)
-    if (results.length === 0) {
-      const localServiceAds = Array.isArray(data.local_ads?.ads) ? data.local_ads.ads : [];
-      console.log("[SerpApi] Local service ads found:", localServiceAds.length);
-
-      for (const ad of localServiceAds) {
-        const url = ad.link || ad.website || "";
-        if (!url) continue;
-        const serpAd = buildSerpAd(keyword, ad.title, url, ad.displayed_link || url);
-        if (serpAd) results.push(serpAd);
-      }
-    }
-
-    // PRIORITY 3: Local pack results with websites (data.local_results)
-    if (results.length === 0) {
-      const localResults = Array.isArray(data.local_results) ? data.local_results : [];
-      const withWebsites = localResults.filter(
-        (r: Record<string, unknown>) => typeof r.website === "string" && r.website.length > 0
-      );
-      console.log("[SerpApi] Local pack results:", localResults.length, "| With websites:", withWebsites.length);
-
-      for (const result of withWebsites) {
-        const r = result as Record<string, string>;
-        const serpAd = buildSerpAd(keyword, r.title || "", r.website, r.website);
-        if (serpAd) results.push(serpAd);
-      }
-    }
-
-    if (results.length === 0) {
-      console.log("[SerpApi] No ads or local results with websites found for:", keyword);
-    }
-
-    console.log("[SerpApi] Total leads extracted:", results.length);
-    return results;
+    console.log("[SerpApi] Total unique leads for '" + keyword + "':", deduped.length);
+    return deduped;
 
   } catch (err) {
-    console.error("[SerpApi] Fetch error for keyword:", keyword, err);
+    console.error("[SerpApi] Error for keyword:", keyword, err);
     return [];
   }
+}
+
+async function queryGoogleSearch(apiKey: string, keyword: string, location?: string): Promise<SerpAd[]> {
+  const params = new URLSearchParams({
+    engine: "google",
+    q: keyword,
+    api_key: apiKey,
+  });
+  if (location) params.set("location", location);
+
+  console.log("[SerpApi] Google Search query:", keyword, location || "(no location)");
+  const response = await fetch("https://serpapi.com/search.json?" + params.toString());
+  if (!response.ok) {
+    console.error("[SerpApi] Google Search HTTP error:", response.status);
+    return [];
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    console.error("[SerpApi] Google Search API error:", data.error);
+    return [];
+  }
+
+  console.log("[SerpApi] Google Search response keys:", Object.keys(data));
+  const results: SerpAd[] = [];
+
+  // Source A: Text ads
+  const textAds = Array.isArray(data.ads) ? data.ads : [];
+  console.log("[SerpApi] Text ads:", textAds.length);
+  for (const ad of textAds) {
+    const serpAd = buildSerpAd(keyword, ad.title, ad.link, ad.displayed_link);
+    if (serpAd) results.push(serpAd);
+  }
+
+  // Source B: Local service ads
+  const localServiceAds = Array.isArray(data.local_ads?.ads) ? data.local_ads.ads : [];
+  console.log("[SerpApi] Local service ads:", localServiceAds.length);
+  for (const ad of localServiceAds) {
+    const url = ad.link || ad.website || "";
+    if (!url) continue;
+    const serpAd = buildSerpAd(keyword, ad.title, url, ad.displayed_link || url);
+    if (serpAd) results.push(serpAd);
+  }
+
+  // Source C: Local pack results (3-pack) — website is at result.links.website
+  const localResults = Array.isArray(data.local_results) ? data.local_results : [];
+  const withWebsites = localResults.filter(
+    (r: Record<string, unknown>) => {
+      const links = r.links as Record<string, string> | undefined;
+      return typeof links?.website === "string" && links.website.length > 0;
+    }
+  );
+  console.log("[SerpApi] Local pack:", localResults.length, "| With websites:", withWebsites.length);
+  for (const result of withWebsites) {
+    const r = result as Record<string, unknown>;
+    const links = r.links as Record<string, string>;
+    const serpAd = buildSerpAd(keyword, (r.title as string) || "", links.website, links.website);
+    if (serpAd) results.push(serpAd);
+  }
+
+  return results;
+}
+
+async function queryGoogleLocal(apiKey: string, keyword: string, location?: string): Promise<SerpAd[]> {
+  const params = new URLSearchParams({
+    engine: "google_local",
+    q: keyword,
+    api_key: apiKey,
+  });
+  if (location) params.set("location", location);
+
+  console.log("[SerpApi] Google Local query:", keyword, location || "(no location)");
+  const response = await fetch("https://serpapi.com/search.json?" + params.toString());
+  if (!response.ok) {
+    console.error("[SerpApi] Google Local HTTP error:", response.status);
+    return [];
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    console.error("[SerpApi] Google Local API error:", data.error);
+    return [];
+  }
+
+  console.log("[SerpApi] Google Local response keys:", Object.keys(data));
+  const results: SerpAd[] = [];
+
+  // Google Local returns local_results with links.website
+  const localResults = Array.isArray(data.local_results) ? data.local_results : [];
+  console.log("[SerpApi] Google Local results:", localResults.length);
+
+  for (const result of localResults) {
+    const r = result as Record<string, unknown>;
+    const links = r.links as Record<string, string> | undefined;
+    const website = links?.website;
+    if (!website) continue;
+
+    const serpAd = buildSerpAd(keyword, (r.title as string) || "", website, website);
+    if (serpAd) results.push(serpAd);
+  }
+
+  // Google Local may also have ads_results
+  const adsResults = Array.isArray(data.ads_results) ? data.ads_results : [];
+  console.log("[SerpApi] Google Local ads_results:", adsResults.length);
+  for (const ad of adsResults) {
+    const a = ad as Record<string, unknown>;
+    const links = a.links as Record<string, string> | undefined;
+    const website = links?.website || (a.displayed_link as string) || "";
+    if (!website) continue;
+    const serpAd = buildSerpAd(keyword, (a.title as string) || "", website, website);
+    if (serpAd) results.push(serpAd);
+  }
+
+  return results;
 }
 
 function buildSerpAd(

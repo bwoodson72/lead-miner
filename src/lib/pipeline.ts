@@ -48,6 +48,7 @@ export async function runLeadSearchPipeline(
   diagnostics.adsFound = allAds.length;
 
   for (let i = 0; i < keywords.length; i++) {
+    diagnostics.messages.push(`Used 2 SerpApi credits for keyword: ${keywords[i]}`);
     if (adResults[i].length === 0) {
       diagnostics.messages.push(`No ads or local businesses found for: ${keywords[i]}`);
     } else {
