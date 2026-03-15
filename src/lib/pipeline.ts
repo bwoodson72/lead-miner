@@ -14,7 +14,7 @@ type Diagnostics = {
   pageSpeedFailures: number;
   slowSites: number;
   emailSent: boolean;
-  errors: string[];
+  messages: string[];
 };
 
 export async function runLeadSearchPipeline(
@@ -28,7 +28,7 @@ export async function runLeadSearchPipeline(
     pageSpeedFailures: 0,
     slowSites: 0,
     emailSent: false,
-    errors: [],
+    messages: [],
   };
 
   const { keywords: keywordsRaw, performanceScore, lcp, cls, tbt, email } = input;
@@ -49,7 +49,9 @@ export async function runLeadSearchPipeline(
 
   for (let i = 0; i < keywords.length; i++) {
     if (adResults[i].length === 0) {
-      diagnostics.errors.push(`No ads found for keyword: ${keywords[i]}`);
+      diagnostics.messages.push(`No ads or local businesses found for: ${keywords[i]}`);
+    } else {
+      diagnostics.messages.push(`Found ${adResults[i].length} results for: ${keywords[i]}`);
     }
   }
 
