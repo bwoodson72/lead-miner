@@ -19,9 +19,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const { leads } = await runLeadSearchPipeline(parsed.data);
+    const { leads, keywords, diagnostics } = await runLeadSearchPipeline(parsed.data);
 
-    return NextResponse.json({ success: true, leadsFound: leads.length, leads });
+    return NextResponse.json({ success: true, leadsFound: leads.length, leads, keywords, diagnostics });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("run-lead-search error:", err);

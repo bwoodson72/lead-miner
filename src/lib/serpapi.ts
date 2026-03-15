@@ -13,10 +13,15 @@ export async function searchAds(keyword: string, location?: string): Promise<Ser
       params.set("location", location);
     }
 
+    console.log("[SerpApi] Searching for:", keyword);
     const response = await fetch(`https://serpapi.com/search.json?${params}`);
     const data = await response.json();
 
+    console.log("[SerpApi] Response keys:", Object.keys(data));
+    console.log("[SerpApi] Ads found:", data.ads?.length ?? 0);
+
     if (!Array.isArray(data.ads)) {
+      console.log("[SerpApi] No ads array in response. Available top-level keys:", Object.keys(data));
       return [];
     }
 
@@ -35,7 +40,7 @@ export async function searchAds(keyword: string, location?: string): Promise<Ser
 
       const parsed = SerpAdSchema.safeParse(mapped);
       if (!parsed.success) {
-        console.warn(`searchAds: skipping invalid ad for keyword "${keyword}":`, parsed.error);
+        console.log("[SerpApi] Ad validation failed:", parsed.error);
         continue;
       }
       results.push(parsed.data);
@@ -43,7 +48,7 @@ export async function searchAds(keyword: string, location?: string): Promise<Ser
 
     return results;
   } catch (err) {
-    console.error(`searchAds: failed for keyword "${keyword}":`, err);
+    console.error("[SerpApi] Fetch error for keyword:", keyword, err);
     return [];
   }
 }

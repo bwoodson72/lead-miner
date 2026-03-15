@@ -8,13 +8,16 @@ import type { LeadRecord } from "@/lib/schemas";
 export default function Home() {
   const [leads, setLeads] = useState<LeadRecord[] | null>(null);
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
 
-  function handleResults(incoming: LeadRecord[]) {
-    setLeads(incoming);
-    if (incoming.length > 0) {
-      const unique = [...new Set(incoming.map((l) => l.keyword))];
-      setKeywords(unique);
-    }
+  function handleResults(data: {
+    leads: LeadRecord[];
+    keywords: string[];
+    diagnostics: Record<string, unknown>;
+  }) {
+    setLeads(data.leads);
+    setKeywords(data.keywords);
+    setDiagnostics(data.diagnostics);
   }
 
   return (
@@ -43,6 +46,23 @@ export default function Home() {
               <span className="font-semibold text-white">{keywords.length}</span>{" "}
               keyword{keywords.length !== 1 ? "s" : ""}
             </p>
+
+            {diagnostics !== null && (
+              <details className="rounded-md bg-zinc-800 border border-zinc-700 px-3 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-zinc-400 select-none">
+                  Pipeline Diagnostics
+                </summary>
+                <dl className="mt-2 space-y-1 font-mono text-xs text-zinc-400">
+                  {Object.entries(diagnostics).map(([key, value]) => (
+                    <div key={key} className="flex gap-2">
+                      <dt className="text-zinc-500">{key}:</dt>
+                      <dd className="text-zinc-300">{JSON.stringify(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            )}
+
             <ResultsTable leads={leads} />
           </div>
         )}

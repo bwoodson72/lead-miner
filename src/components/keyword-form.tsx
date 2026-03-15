@@ -5,8 +5,14 @@ import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeywordInputSchema, type KeywordInput, type LeadRecord } from "@/lib/schemas";
 
+interface ResultsData {
+  leads: LeadRecord[];
+  keywords: string[];
+  diagnostics: Record<string, unknown>;
+}
+
 interface KeywordFormProps {
-  onResults: (leads: LeadRecord[]) => void;
+  onResults: (data: ResultsData) => void;
 }
 
 export default function KeywordForm({ onResults }: KeywordFormProps) {
@@ -40,7 +46,7 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
       if (!res.ok || !json.success) {
         setErrorMsg(json.error ?? "An unexpected error occurred.");
       } else {
-        onResults(json.leads);
+        onResults({ leads: json.leads, keywords: json.keywords, diagnostics: json.diagnostics });
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Network error.");
