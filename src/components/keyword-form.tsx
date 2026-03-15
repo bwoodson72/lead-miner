@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeywordInputSchema, type KeywordInput, type LeadRecord } from "@/lib/schemas";
+import { getApiUrl } from "@/lib/env";
 
 interface ResultsData {
   leads: LeadRecord[];
@@ -36,8 +37,9 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
   async function onSubmit(data: KeywordInput) {
     setLoading(true);
     setErrorMsg(null);
+    const apiUrl = getApiUrl();
     try {
-      const res = await fetch("/api/run-lead-search", {
+      const res = await fetch(apiUrl + "/api/run-lead-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -162,7 +164,7 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
           id="maxDomains"
           type="number"
           min={1}
-          max={20}
+          max={50}
           {...register("maxDomains", { valueAsNumber: true })}
           className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
