@@ -13,7 +13,7 @@ function scoreColor(score: number): string {
 }
 
 export default function ResultsTable({ leads }: ResultsTableProps) {
-  if (leads.length === 0) {
+  if (!leads || leads.length === 0) {
     return (
       <p className="text-center text-zinc-400 py-8">No slow sites found.</p>
     );

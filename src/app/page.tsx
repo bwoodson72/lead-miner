@@ -15,9 +15,9 @@ export default function Home() {
     keywords: string[];
     diagnostics: Record<string, unknown>;
   }) {
-    setLeads(data.leads);
-    setKeywords(data.keywords);
-    setDiagnostics(data.diagnostics);
+    setLeads(data.leads ?? []);
+    setKeywords(data.keywords ?? []);
+    setDiagnostics(data.diagnostics ?? null);
   }
 
   return (

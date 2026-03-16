@@ -19,6 +19,7 @@ interface KeywordFormProps {
 export default function KeywordForm({ onResults }: KeywordFormProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const {
     register,
@@ -37,37 +38,78 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
   async function onSubmit(data: KeywordInput) {
     setLoading(true);
     setErrorMsg(null);
+    setProgress(null);
+
     const apiUrl = getApiUrl();
+
     try {
-      const res = await fetch(apiUrl + "/api/run-lead-search", {
+      // Start the job
+      const startRes = await fetch(apiUrl + "/api/run-lead-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
-      if (!res.ok) {
-        let errorMessage = "Request failed with status " + res.status;
+      if (!startRes.ok) {
+        let errorMessage = "Request failed with status " + startRes.status;
         try {
-          const json = await res.json();
+          const json = await startRes.json();
           if (json.error) errorMessage = json.error;
-        } catch {
-          if (res.status === 504 || res.status === 408) {
-            errorMessage = "Request timed out. Try reducing the number of keywords or max domains.";
-          }
-        }
+        } catch {}
         setErrorMsg(errorMessage);
+        setLoading(false);
         return;
       }
 
-      const json = await res.json();
-      if (!json.success) {
-        setErrorMsg(json.error ?? "An unexpected error occurred.");
-      } else {
-        onResults({ leads: json.leads, keywords: json.keywords, diagnostics: json.diagnostics });
+      const startJson = await startRes.json();
+      if (!startJson.jobId) {
+        setErrorMsg("No job ID returned from server.");
+        setLoading(false);
+        return;
       }
+
+      const jobId = startJson.jobId;
+
+      // Poll for results
+      const pollInterval = setInterval(async () => {
+        try {
+          const pollRes = await fetch(apiUrl + "/api/jobs/" + jobId);
+          if (!pollRes.ok) {
+            clearInterval(pollInterval);
+            setErrorMsg("Failed to check job status.");
+            setLoading(false);
+            return;
+          }
+
+          const job = await pollRes.json();
+
+          // Update progress display
+          if (job.progress) {
+            setProgress(job.progress.detail);
+          }
+
+          if (job.status === "complete") {
+            clearInterval(pollInterval);
+            onResults({
+              leads: job.leads ?? [],
+              keywords: job.keywords ?? [],
+              diagnostics: job.diagnostics ?? {},
+            });
+            setLoading(false);
+          } else if (job.status === "failed") {
+            clearInterval(pollInterval);
+            setErrorMsg(job.error || "Pipeline failed.");
+            setLoading(false);
+          }
+        } catch (err) {
+          clearInterval(pollInterval);
+          setErrorMsg("Lost connection to server.");
+          setLoading(false);
+        }
+      }, 2000);
+
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Network error.");
-    } finally {
       setLoading(false);
     }
   }
@@ -195,6 +237,18 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         <p className="rounded-md bg-red-900/40 border border-red-700 px-3 py-2 text-sm text-red-300">
           {errorMsg}
         </p>
+      )}
+
+      {loading && progress && (
+        <div className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-3 text-sm text-zinc-300">
+          <div className="flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <span>{progress}</span>
+          </div>
+        </div>
       )}
 
       <button
