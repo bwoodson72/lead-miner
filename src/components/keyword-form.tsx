@@ -206,7 +206,7 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
           id="maxDomains"
           type="number"
           min={1}
-          max={50}
+          max={200}
           {...register("maxDomains", { valueAsNumber: true })}
           className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />

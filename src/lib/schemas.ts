@@ -6,7 +6,7 @@ export const KeywordInputSchema = z.object({
   lcp: z.number().default(4000),
   cls: z.number().default(0.25),
   tbt: z.number().default(300),
-  maxDomains: z.number().min(1).max(50).default(20),
+  maxDomains: z.number().min(1).max(200).default(100),
   email: z.string().email(),
 });
 
@@ -29,6 +29,7 @@ export const LeadRecordSchema = z.object({
   lcp: z.number(),
   cls: z.number(),
   tbt: z.number(),
+  adSource: z.enum(["paid_ad", "local_organic"]),
   timestamp: z.string(),
 });
 

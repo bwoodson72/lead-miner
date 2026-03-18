@@ -12,6 +12,11 @@ function scoreColor(score: number): string {
   return "text-green-400";
 }
 
+function formatAdSource(source: string): { label: string; className: string } {
+  if (source === "paid_ad") return { label: "Ad", className: "text-amber-400" };
+  return { label: "Organic", className: "text-emerald-400" };
+}
+
 export default function ResultsTable({ leads }: ResultsTableProps) {
   if (!leads || leads.length === 0) {
     return (
@@ -29,44 +34,51 @@ export default function ResultsTable({ leads }: ResultsTableProps) {
             <th className="px-4 py-3">LCP</th>
             <th className="px-4 py-3">CLS</th>
             <th className="px-4 py-3">TBT</th>
+            <th className="px-4 py-3">Source</th>
             <th className="px-4 py-3">Keyword</th>
             <th className="px-4 py-3">Landing Page</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-700">
-          {leads.map((lead, i) => (
-            <tr key={i} className="bg-zinc-900 hover:bg-zinc-800/60 transition-colors">
-              <td className="px-4 py-3 font-medium text-white whitespace-nowrap">
-                {lead.domain}
-              </td>
-              <td className={`px-4 py-3 font-semibold ${scoreColor(lead.performanceScore)}`}>
-                {lead.performanceScore}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                {(lead.lcp / 1000).toFixed(1)}s
-              </td>
-              <td className="px-4 py-3">
-                {lead.cls.toFixed(2)}
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                {Math.round(lead.tbt)}ms
-              </td>
-              <td className="px-4 py-3 text-zinc-400">
-                {lead.keyword}
-              </td>
-              <td className="px-4 py-3 max-w-[200px]">
-                <a
-                  href={lead.landingPageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-indigo-400 hover:text-indigo-300 underline truncate block"
-                  title={lead.landingPageUrl}
-                >
-                  {lead.landingPageUrl}
-                </a>
-              </td>
-            </tr>
-          ))}
+          {leads.map((lead, i) => {
+            const source = formatAdSource(lead.adSource);
+            return (
+              <tr key={i} className="bg-zinc-900 hover:bg-zinc-800/60 transition-colors">
+                <td className="px-4 py-3 font-medium text-white whitespace-nowrap">
+                  {lead.domain}
+                </td>
+                <td className={`px-4 py-3 font-semibold ${scoreColor(lead.performanceScore)}`}>
+                  {lead.performanceScore}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {(lead.lcp / 1000).toFixed(1)}s
+                </td>
+                <td className="px-4 py-3">
+                  {lead.cls.toFixed(2)}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {Math.round(lead.tbt)}ms
+                </td>
+                <td className={`px-4 py-3 font-medium ${source.className}`}>
+                  {source.label}
+                </td>
+                <td className="px-4 py-3 text-zinc-400">
+                  {lead.keyword}
+                </td>
+                <td className="px-4 py-3 max-w-[200px]">
+                  <a
+                    href={lead.landingPageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-400 hover:text-indigo-300 underline truncate block"
+                    title={lead.landingPageUrl}
+                  >
+                    {lead.landingPageUrl}
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

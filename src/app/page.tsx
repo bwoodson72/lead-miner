@@ -45,6 +45,16 @@ export default function Home() {
               lead{leads.length !== 1 ? "s" : ""} from{" "}
               <span className="font-semibold text-white">{keywords.length}</span>{" "}
               keyword{keywords.length !== 1 ? "s" : ""}
+              {diagnostics && typeof diagnostics.franchisesFiltered === "number" && diagnostics.franchisesFiltered > 0 && (
+                <span>
+                  {" "}· <span className="font-semibold text-zinc-300">{String(diagnostics.franchisesFiltered)}</span> franchise{diagnostics.franchisesFiltered !== 1 ? "s" : ""} filtered
+                </span>
+              )}
+              {diagnostics && typeof diagnostics.hubspotCreated === "number" && (
+                <span>
+                  {" "}· <span className="font-semibold text-emerald-400">{String(diagnostics.hubspotCreated)}</span> pushed to HubSpot
+                </span>
+              )}
             </p>
 
             {diagnostics !== null && (
