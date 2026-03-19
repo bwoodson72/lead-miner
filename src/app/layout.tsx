@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Lead Miner",
-  description: "Leads for my Business",
+  description: "Find and manage leads from businesses with slow websites",
 };
 
 export default function RootLayout({
@@ -27,6 +27,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <nav className="border-b border-zinc-800 bg-zinc-950">
+          <div className="mx-auto max-w-7xl px-4 flex items-center gap-6 h-12">
+            <span className="text-sm font-bold text-white tracking-tight">Lead Miner</span>
+            <a href="/" className="text-sm text-zinc-400 hover:text-white transition-colors">Search</a>
+            <a href="/dashboard" className="text-sm text-zinc-400 hover:text-white transition-colors">Dashboard</a>
+          </div>
+        </nav>
         {children}
       </body>
     </html>

@@ -1,0 +1,33 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+export async function GET() {
+  const [total, newCount, contactedCount, respondedCount, proposalCount, wonCount, lostCount, withEmail, withPhone] = await Promise.all([
+    prisma.lead.count(),
+    prisma.lead.count({ where: { status: "new" } }),
+    prisma.lead.count({ where: { status: "contacted" } }),
+    prisma.lead.count({ where: { status: "responded" } }),
+    prisma.lead.count({ where: { status: "proposal_sent" } }),
+    prisma.lead.count({ where: { status: "won" } }),
+    prisma.lead.count({ where: { status: "lost" } }),
+    prisma.lead.count({ where: { email: { not: null } } }),
+    prisma.lead.count({ where: { phone: { not: null } } }),
+  ]);
+
+  const avgResult = await prisma.lead.aggregate({
+    _avg: { lighthouseScore: true },
+  });
+
+  return NextResponse.json({
+    total,
+    new_count: newCount,
+    contacted_count: contactedCount,
+    responded_count: respondedCount,
+    proposal_sent_count: proposalCount,
+    won_count: wonCount,
+    lost_count: lostCount,
+    with_email: withEmail,
+    with_phone: withPhone,
+    avg_score: Math.round(avgResult._avg.lighthouseScore ?? 0),
+  });
+}
