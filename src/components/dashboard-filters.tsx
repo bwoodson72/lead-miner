@@ -15,6 +15,7 @@ const STATUS_OPTIONS = [
   { value: "proposal_sent", label: "Proposal Sent" },
   { value: "won", label: "Won" },
   { value: "lost", label: "Lost" },
+  { value: "rejected", label: "Rejected" },
 ];
 
 const SORT_OPTIONS = [
@@ -74,6 +75,33 @@ export default function DashboardFilters({ filters, onChange }: FilterProps) {
           className="rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500"
         />
         Has Phone
+      </label>
+      <label className="flex items-center gap-1.5 text-sm text-zinc-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={filters.hideRejected}
+          onChange={(e) => onChange({ ...filters, hideRejected: e.target.checked })}
+          className="rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500"
+        />
+        Hide Rejected
+      </label>
+      <label className="flex items-center gap-1.5 text-sm text-zinc-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={filters.hideAgency}
+          onChange={(e) => onChange({ ...filters, hideAgency: e.target.checked })}
+          className="rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500"
+        />
+        Hide Agency
+      </label>
+      <label className="flex items-center gap-1.5 text-sm text-zinc-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={filters.hideChains}
+          onChange={(e) => onChange({ ...filters, hideChains: e.target.checked })}
+          className="rounded border-zinc-600 bg-zinc-800 text-indigo-500 focus:ring-indigo-500"
+        />
+        Hide Chains
       </label>
     </div>
   );

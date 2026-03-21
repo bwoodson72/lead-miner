@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 export async function GET() {
-  const [total, newCount, contactedCount, respondedCount, proposalCount, wonCount, lostCount, withEmail, withPhone] = await Promise.all([
+  const [total, newCount, contactedCount, respondedCount, proposalCount, wonCount, lostCount, withEmail, withPhone, rejectedCount, agencyCount, chainCount] = await Promise.all([
     prisma.lead.count(),
     prisma.lead.count({ where: { status: "new" } }),
     prisma.lead.count({ where: { status: "contacted" } }),
@@ -12,6 +12,9 @@ export async function GET() {
     prisma.lead.count({ where: { status: "lost" } }),
     prisma.lead.count({ where: { email: { not: null } } }),
     prisma.lead.count({ where: { phone: { not: null } } }),
+    prisma.lead.count({ where: { status: "rejected" } }),
+    prisma.lead.count({ where: { isAgencyManaged: true } }),
+    prisma.lead.count({ where: { isNationalChain: true } }),
   ]);
 
   const avgResult = await prisma.lead.aggregate({
@@ -29,5 +32,8 @@ export async function GET() {
     with_email: withEmail,
     with_phone: withPhone,
     avg_score: Math.round(avgResult._avg.lighthouseScore ?? 0),
+    rejected_count: rejectedCount,
+    agency_count: agencyCount,
+    chain_count: chainCount,
   });
 }

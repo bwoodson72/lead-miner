@@ -7,6 +7,11 @@ interface LeadTableProps {
   leads: Lead[];
   loading: boolean;
   onUpdate: (id: number, updates: Record<string, unknown>) => void;
+  onDelete: (id: number) => void;
+  selectedIds: Set<number>;
+  onToggleSelect: (id: number) => void;
+  onSelectAll: () => void;
+  onBatchReject: (reason: string) => void;
 }
 
 const STATUS_OPTIONS = [
@@ -16,6 +21,7 @@ const STATUS_OPTIONS = [
   { value: "proposal_sent", label: "Proposal", color: "bg-purple-500/20 text-purple-400" },
   { value: "won", label: "Won", color: "bg-green-500/20 text-green-400" },
   { value: "lost", label: "Lost", color: "bg-zinc-500/20 text-zinc-400" },
+  { value: "rejected", label: "Rejected", color: "bg-red-500/20 text-red-400" },
 ];
 
 function scoreColor(score: number): string {
@@ -28,7 +34,7 @@ function getStatusStyle(status: string): string {
   return STATUS_OPTIONS.find((s) => s.value === status)?.color ?? "bg-zinc-500/20 text-zinc-400";
 }
 
-export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) {
+export default function LeadTable({ leads, loading, onUpdate, onDelete, selectedIds, onToggleSelect, onSelectAll, onBatchReject }: LeadTableProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [noteText, setNoteText] = useState("");
 
@@ -41,10 +47,24 @@ export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) 
   }
 
   return (
+    <div>
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-3 px-3 py-2 bg-zinc-800 rounded-lg border border-zinc-700">
+          <span className="text-sm text-zinc-300">{selectedIds.size} selected</span>
+          <button onClick={() => onBatchReject("agency_managed")} className="rounded bg-orange-600/80 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-500">Reject: Agency</button>
+          <button onClick={() => onBatchReject("national_chain")} className="rounded bg-orange-600/80 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-500">Reject: Chain</button>
+          <button onClick={() => onBatchReject("not_a_business")} className="rounded bg-orange-600/80 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-500">Reject: Not a Business</button>
+          <button onClick={() => onBatchReject("already_has_vendor")} className="rounded bg-orange-600/80 px-2.5 py-1 text-xs font-medium text-white hover:bg-orange-500">Reject: Has Vendor</button>
+          <button onClick={() => onBatchReject("other")} className="rounded bg-zinc-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-zinc-500">Reject: Other</button>
+        </div>
+      )}
     <div className="overflow-x-auto rounded-lg border border-zinc-700">
       <table className="w-full text-sm text-left text-zinc-300">
         <thead className="bg-zinc-800 text-zinc-400 uppercase text-xs tracking-wider">
           <tr>
+            <th className="px-3 py-3 w-8">
+              <input type="checkbox" checked={selectedIds.size === leads.length && leads.length > 0} onChange={onSelectAll} className="rounded border-zinc-600 bg-zinc-800" />
+            </th>
             <th className="px-3 py-3">Domain</th>
             <th className="px-3 py-3">Score</th>
             <th className="px-3 py-3">LCP</th>
@@ -62,6 +82,9 @@ export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) 
                 className="bg-zinc-900 hover:bg-zinc-800/60 transition-colors cursor-pointer"
                 onClick={() => setExpandedId(expandedId === lead.id ? null : lead.id)}
               >
+                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.has(lead.id)} onChange={() => onToggleSelect(lead.id)} className="rounded border-zinc-600 bg-zinc-800" />
+                </td>
                 <td className="px-3 py-3">
                   <div className="font-medium text-white">{lead.businessName || lead.domain}</div>
                   {lead.businessName && <div className="text-xs text-zinc-500">{lead.domain}</div>}
@@ -74,9 +97,11 @@ export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) 
                   </span>
                 </td>
                 <td className="px-3 py-3">
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     {lead.email && <span className="text-xs bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400" title={lead.email}>Email</span>}
                     {lead.phone && <span className="text-xs bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400" title={lead.phone}>Phone</span>}
+                    {lead.isAgencyManaged && <span className="text-xs bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded" title={lead.agencyName || "Agency managed"}>Agency</span>}
+                    {lead.isNationalChain && <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded" title={lead.chainReason || "National chain"}>Chain</span>}
                   </div>
                 </td>
                 <td className="px-3 py-3">
@@ -98,18 +123,34 @@ export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) 
                   )}
                 </td>
                 <td className="px-3 py-3">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onUpdate(lead.id, { bumpOutreach: true }); }}
-                    className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-500 transition-colors"
-                  >
-                    Log Outreach
-                  </button>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onUpdate(lead.id, { bumpOutreach: true }); }}
+                      className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-500 transition-colors"
+                    >
+                      Log Outreach
+                    </button>
+                    {lead.status !== "rejected" && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onUpdate(lead.id, { status: "rejected" }); }}
+                        className="rounded bg-orange-600/80 px-2 py-1 text-xs font-medium text-white hover:bg-orange-500 transition-colors"
+                      >
+                        Reject
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this lead permanently?")) onDelete(lead.id); }}
+                      className="rounded bg-red-600/80 px-2 py-1 text-xs font-medium text-white hover:bg-red-500 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
 
               {expandedId === lead.id && (
                 <tr className="bg-zinc-900/50">
-                  <td colSpan={8} className="px-4 py-4">
+                  <td colSpan={9} className="px-4 py-4">
                     <div className="grid grid-cols-2 gap-6 text-sm">
                       <div className="space-y-3">
                         <div>
@@ -128,6 +169,13 @@ export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) 
                         </div>
                       </div>
                       <div>
+                        {(lead.isAgencyManaged || lead.isNationalChain) && (
+                          <div className="mb-3">
+                            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Flags</div>
+                            {lead.isAgencyManaged && <div className="text-orange-400 text-xs">Agency: {lead.agencyName || "Detected"}</div>}
+                            {lead.isNationalChain && <div className="text-red-400 text-xs">National Chain: {lead.chainReason || "Detected"}</div>}
+                          </div>
+                        )}
                         <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Notes</div>
                         <div className="space-y-1.5 mb-3 max-h-40 overflow-y-auto">
                           {lead.notes.length === 0 && <div className="text-zinc-500 text-xs">No notes yet</div>}
@@ -172,6 +220,7 @@ export default function LeadTable({ leads, loading, onUpdate }: LeadTableProps) 
           ))}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

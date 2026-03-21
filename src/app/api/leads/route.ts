@@ -9,6 +9,9 @@ export async function GET(request: NextRequest) {
   const search = params.get("search");
   const hasEmail = params.get("hasEmail");
   const hasPhone = params.get("hasPhone");
+  const hideRejected = params.get("hideRejected");
+  const hideAgency = params.get("hideAgency");
+  const hideChains = params.get("hideChains");
   const sortBy = params.get("sortBy") || "createdAt";
   const sortDir = params.get("sortDir") || "desc";
 
@@ -28,6 +31,15 @@ export async function GET(request: NextRequest) {
   }
   if (hasPhone === "true") {
     where.phone = { not: null };
+  }
+  if (hideRejected === "true" && !status) {
+    where.status = { not: "rejected" };
+  }
+  if (hideAgency === "true") {
+    where.isAgencyManaged = false;
+  }
+  if (hideChains === "true") {
+    where.isNationalChain = false;
   }
 
   const sortMap: Record<string, string> = {

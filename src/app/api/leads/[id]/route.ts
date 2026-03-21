@@ -49,3 +49,20 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const leadId = parseInt(id);
+  try {
+    await prisma.lead.delete({ where: { id: leadId } });
+    return NextResponse.json({ success: true, id: leadId });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Delete failed" },
+      { status: 404 }
+    );
+  }
+}

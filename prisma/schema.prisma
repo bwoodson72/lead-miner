@@ -33,10 +33,17 @@ model Lead {
 
   notes            Json      @default("[]")
 
+  isAgencyManaged  Boolean   @default(false) @map("is_agency_managed")
+  agencyName       String?   @map("agency_name")
+  isNationalChain  Boolean   @default(false) @map("is_national_chain")
+  chainReason      String?   @map("chain_reason")
+
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@index([status])
   @@index([lighthouseScore])
+  @@index([isAgencyManaged])
+  @@index([isNationalChain])
   @@map("leads")
 }

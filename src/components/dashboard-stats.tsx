@@ -14,12 +14,15 @@ export default function DashboardStats({ stats }: StatsProps) {
     { label: "Won", value: stats.won_count ?? 0, color: "text-green-400" },
     { label: "With Email", value: stats.with_email ?? 0, color: "text-zinc-300" },
     { label: "With Phone", value: stats.with_phone ?? 0, color: "text-zinc-300" },
+    { label: "Rejected", value: stats.rejected_count ?? 0, color: "text-red-400" },
+    { label: "Agency", value: stats.agency_count ?? 0, color: "text-orange-400" },
+    { label: "Chains", value: stats.chain_count ?? 0, color: "text-orange-400" },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-3 mb-6 sm:grid-cols-8">
+    <div className="flex flex-wrap gap-3 mb-6">
       {cards.map((card) => (
-        <div key={card.label} className="rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-center">
+        <div key={card.label} className="rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2.5 text-center min-w-[100px] flex-1">
           <div className={`text-lg font-bold ${card.color}`}>{card.value}</div>
           <div className="text-xs text-zinc-500 mt-0.5">{card.label}</div>
         </div>
