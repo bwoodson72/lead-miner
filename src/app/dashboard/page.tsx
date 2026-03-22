@@ -30,6 +30,7 @@ export type Lead = {
   agencyName: string | null;
   isNationalChain: boolean;
   chainReason: string | null;
+  followUpDate: string | null;
   createdAt: string;
   updatedAt: string;
 };

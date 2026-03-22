@@ -16,6 +16,16 @@ export async function PATCH(
       updateData.status = body.status;
     }
 
+    if (body.followUpDate && typeof body.followUpDate === "string") {
+      updateData.followUpDate = new Date(body.followUpDate);
+    } else if (typeof body.snooze === "number") {
+      updateData.followUpDate = new Date(Date.now() + body.snooze * 24 * 60 * 60 * 1000);
+    } else if (body.status === "contacted") {
+      updateData.followUpDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    } else if (["responded", "call_scheduled", "won", "lost"].includes(body.status)) {
+      updateData.followUpDate = null;
+    }
+
     if (body.bumpOutreach) {
       updateData.outreachCount = { increment: 1 };
       updateData.lastOutreachDate = new Date();

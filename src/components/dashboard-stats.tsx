@@ -17,6 +17,7 @@ export default function DashboardStats({ stats }: StatsProps) {
     { label: "Rejected", value: stats.rejected_count ?? 0, color: "text-red-400" },
     { label: "Agency", value: stats.agency_count ?? 0, color: "text-orange-400" },
     { label: "Chains", value: stats.chain_count ?? 0, color: "text-orange-400" },
+    { label: "Follow-Up Due", value: stats.follow_up_due ?? 0, color: "text-yellow-400" },
   ];
 
   return (

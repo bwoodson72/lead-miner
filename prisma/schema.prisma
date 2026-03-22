@@ -37,6 +37,7 @@ model Lead {
   agencyName       String?   @map("agency_name")
   isNationalChain  Boolean   @default(false) @map("is_national_chain")
   chainReason      String?   @map("chain_reason")
+  followUpDate     DateTime? @map("follow_up_date")
 
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
@@ -45,5 +46,6 @@ model Lead {
   @@index([lighthouseScore])
   @@index([isAgencyManaged])
   @@index([isNationalChain])
+  @@index([followUpDate])
   @@map("leads")
 }

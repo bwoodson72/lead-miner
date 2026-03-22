@@ -169,11 +169,12 @@ export default function LeadTable({ leads, loading, onUpdate, onDelete, selected
                         </div>
                       </div>
                       <div>
-                        {(lead.isAgencyManaged || lead.isNationalChain) && (
+                        {(lead.isAgencyManaged || lead.isNationalChain || lead.followUpDate) && (
                           <div className="mb-3">
                             <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Flags</div>
                             {lead.isAgencyManaged && <div className="text-orange-400 text-xs">Agency: {lead.agencyName || "Detected"}</div>}
                             {lead.isNationalChain && <div className="text-red-400 text-xs">National Chain: {lead.chainReason || "Detected"}</div>}
+                            {lead.followUpDate && <div className="text-blue-400 text-xs">Follow-up: {new Date(lead.followUpDate).toLocaleDateString()}</div>}
                           </div>
                         )}
                         <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Notes</div>
