@@ -162,9 +162,18 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold tracking-tight">Lead Dashboard</h1>
             <p className="mt-1 text-sm text-zinc-400">Manage and track your outreach pipeline</p>
           </div>
-          <Link href="/" className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors">
-            Run New Search
-          </Link>
+          <div className="flex items-center gap-3">
+            <a
+              href={"/api/leads/export?" + (() => { const p = new URLSearchParams(); if (filters.status !== "all") p.set("status", filters.status); if (filters.search) p.set("search", filters.search); if (filters.hasEmail) p.set("hasEmail", "true"); if (filters.hasPhone) p.set("hasPhone", "true"); if (filters.hideRejected) p.set("hideRejected", "true"); if (filters.hideAgency) p.set("hideAgency", "true"); if (filters.hideChains) p.set("hideChains", "true"); return p.toString(); })()}
+              download
+              className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
+            >
+              Export CSV
+            </a>
+            <Link href="/" className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors">
+              Run New Search
+            </Link>
+          </div>
         </div>
         {stats && <DashboardStats stats={stats} />}
         <DashboardFilters filters={filters} onChange={handleFilterChange} />
