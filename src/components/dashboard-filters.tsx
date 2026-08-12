@@ -18,8 +18,15 @@ const STATUS_OPTIONS = [
   { value: "rejected", label: "Rejected" },
 ];
 
+const SOURCE_OPTIONS = [
+  { value: "all", label: "All Sources" },
+  { value: "paid_ad", label: "Paid Ads" },
+  { value: "local_organic", label: "Organic" },
+];
+
 const SORT_OPTIONS = [
   { value: "createdAt", label: "Newest" },
+  { value: "adSource", label: "Ads First" },
   { value: "lighthouseScore", label: "Worst Score" },
   { value: "lcp", label: "Slowest LCP" },
   { value: "outreachCount", label: "Most Contacted" },
@@ -39,9 +46,20 @@ export default function DashboardFilters({ filters, onChange }: FilterProps) {
       <select
         value={filters.status}
         onChange={(e) => onChange({ ...filters, status: e.target.value })}
+        aria-label="Lead status"
         className="rounded-md bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
       >
         {STATUS_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <select
+        value={filters.adSource}
+        onChange={(e) => onChange({ ...filters, adSource: e.target.value })}
+        aria-label="Lead source"
+        className="rounded-md bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      >
+        {SOURCE_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
         ))}
       </select>
@@ -52,6 +70,7 @@ export default function DashboardFilters({ filters, onChange }: FilterProps) {
           const sortDir = sortBy === "lighthouseScore" ? "asc" : "desc";
           onChange({ ...filters, sortBy, sortDir });
         }}
+        aria-label="Sort leads"
         className="rounded-md bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
       >
         {SORT_OPTIONS.map((opt) => (
