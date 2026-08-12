@@ -7,6 +7,7 @@ interface StatsProps {
 export default function DashboardStats({ stats }: StatsProps) {
   const cards = [
     { label: "Total Leads", value: stats.total ?? 0, color: "text-white" },
+    { label: "Paid Ads", value: stats.paid_ad_count ?? 0, color: "text-amber-400" },
     { label: "New", value: stats.new_count ?? 0, color: "text-blue-400" },
     { label: "Contacted", value: stats.contacted_count ?? 0, color: "text-amber-400" },
     { label: "Responded", value: stats.responded_count ?? 0, color: "text-emerald-400" },
