@@ -32,6 +32,7 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
       lcp: 4000,
       cls: 0.25,
       tbt: 300,
+      location: "",
     },
   });
 
@@ -43,7 +44,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
     const apiUrl = getApiUrl();
 
     try {
-      // Start the job
       const startRes = await fetch(apiUrl + "/api/run-lead-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,7 +70,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
 
       const jobId = startJson.jobId;
 
-      // Poll for results
       const pollInterval = setInterval(async () => {
         try {
           const pollRes = await fetch(apiUrl + "/api/jobs/" + jobId);
@@ -83,7 +82,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
 
           const job = await pollRes.json();
 
-          // Update progress display
           if (job.progress) {
             setProgress(job.progress.detail);
           }
@@ -101,7 +99,7 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
             setErrorMsg(job.error || "Pipeline failed.");
             setLoading(false);
           }
-        } catch (err) {
+        } catch {
           clearInterval(pollInterval);
           setErrorMsg("Lost connection to server.");
           setLoading(false);
@@ -116,7 +114,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-      {/* Keywords */}
       <div>
         <label htmlFor="keywords" className="block mb-1.5 text-sm font-medium text-zinc-300">
           Keywords
@@ -133,7 +130,22 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         )}
       </div>
 
-      {/* Threshold grid */}
+      <div>
+        <label htmlFor="location" className="block mb-1.5 text-sm font-medium text-zinc-300">
+          Search Location Override <span className="font-normal text-zinc-500">(optional)</span>
+        </label>
+        <input
+          id="location"
+          type="text"
+          {...register("location")}
+          placeholder="Granbury, Texas, United States"
+          className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white placeholder-zinc-500 border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <p className="mt-1 text-xs text-zinc-500">
+          Leave blank for multi-city batches. The API will infer the city for each keyword from local results. Use this override for a single-market search.
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
           <label htmlFor="performanceScore" className="block mb-1.5 text-sm font-medium text-zinc-300">
@@ -197,7 +209,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         </div>
       </div>
 
-      {/* Max Domains */}
       <div>
         <label htmlFor="maxDomains" className="block mb-1.5 text-sm font-medium text-zinc-300">
           Max Domains to Analyze
@@ -215,7 +226,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         )}
       </div>
 
-      {/* Email */}
       <div>
         <label htmlFor="email" className="block mb-1.5 text-sm font-medium text-zinc-300">
           Report Email
@@ -232,7 +242,6 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         )}
       </div>
 
-      {/* Error message */}
       {errorMsg && (
         <p className="rounded-md bg-red-900/40 border border-red-700 px-3 py-2 text-sm text-red-300">
           {errorMsg}
