@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
 
   const status = params.get("status");
+  const adSource = params.get("adSource");
   const search = params.get("search");
   const hasEmail = params.get("hasEmail");
   const hasPhone = params.get("hasPhone");
@@ -19,6 +20,9 @@ export async function GET(request: NextRequest) {
 
   if (status && status !== "all") {
     where.status = status;
+  }
+  if (adSource === "paid_ad" || adSource === "local_organic") {
+    where.adSource = adSource;
   }
   if (search) {
     where.OR = [
@@ -44,6 +48,7 @@ export async function GET(request: NextRequest) {
 
   const sortMap: Record<string, string> = {
     createdAt: "createdAt",
+    adSource: "adSource",
     lighthouseScore: "lighthouseScore",
     lcp: "lcp",
     outreachCount: "outreachCount",
