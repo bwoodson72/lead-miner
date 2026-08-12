@@ -37,6 +37,7 @@ export type Lead = {
 
 export type Filters = {
   status: string;
+  adSource: string;
   search: string;
   hasEmail: boolean;
   hasPhone: boolean;
@@ -55,6 +56,7 @@ export default function DashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [filters, setFilters] = useState<Filters>({
     status: "all",
+    adSource: "all",
     search: "",
     hasEmail: false,
     hasPhone: false,
@@ -70,6 +72,7 @@ export default function DashboardPage() {
 
     const params = new URLSearchParams();
     if (filters.status !== "all") params.set("status", filters.status);
+    if (filters.adSource !== "all") params.set("adSource", filters.adSource);
     if (filters.search) params.set("search", filters.search);
     if (filters.hasEmail) params.set("hasEmail", "true");
     if (filters.hasPhone) params.set("hasPhone", "true");
@@ -164,7 +167,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             <a
-              href={"/api/leads/export?" + (() => { const p = new URLSearchParams(); if (filters.status !== "all") p.set("status", filters.status); if (filters.search) p.set("search", filters.search); if (filters.hasEmail) p.set("hasEmail", "true"); if (filters.hasPhone) p.set("hasPhone", "true"); if (filters.hideRejected) p.set("hideRejected", "true"); if (filters.hideAgency) p.set("hideAgency", "true"); if (filters.hideChains) p.set("hideChains", "true"); return p.toString(); })()}
+              href={"/api/leads/export?" + (() => { const p = new URLSearchParams(); if (filters.status !== "all") p.set("status", filters.status); if (filters.adSource !== "all") p.set("adSource", filters.adSource); if (filters.search) p.set("search", filters.search); if (filters.hasEmail) p.set("hasEmail", "true"); if (filters.hasPhone) p.set("hasPhone", "true"); if (filters.hideRejected) p.set("hideRejected", "true"); if (filters.hideAgency) p.set("hideAgency", "true"); if (filters.hideChains) p.set("hideChains", "true"); return p.toString(); })()}
               download
               className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
             >
