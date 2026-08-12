@@ -8,6 +8,7 @@ export const KeywordInputSchema = z.object({
   tbt: z.number().default(300),
   maxDomains: z.number().min(1).max(200).default(100),
   email: z.string().email(),
+  location: z.string().optional().default(""),
 });
 
 export type KeywordInput = z.infer<typeof KeywordInputSchema>;
