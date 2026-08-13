@@ -26,6 +26,12 @@ export default function Home() {
   const organicFound = diagnostics && typeof diagnostics.organicBusinessesFound === "number"
     ? diagnostics.organicBusinessesFound
     : null;
+  const domainsAnalyzed = diagnostics && typeof diagnostics.pageSpeedResults === "number"
+    ? diagnostics.pageSpeedResults
+    : null;
+  const pageSpeedFailures = diagnostics && typeof diagnostics.pageSpeedFailures === "number"
+    ? diagnostics.pageSpeedFailures
+    : 0;
   const paidLeads = leads?.filter((lead) => lead.adSource === "paid_ad").length ?? 0;
 
   return (
@@ -45,6 +51,10 @@ export default function Home() {
         {leads !== null && (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
+              <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
+                <div className="text-xl font-bold text-white">{domainsAnalyzed ?? "—"}</div>
+                <div className="text-xs text-zinc-500">Domains analyzed</div>
+              </div>
               <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
                 <div className="text-xl font-bold text-white">{leads.length}</div>
                 <div className="text-xs text-zinc-500">Slow leads returned</div>
@@ -66,6 +76,11 @@ export default function Home() {
             <p className="text-sm text-zinc-400">
               Searched <span className="font-semibold text-white">{keywords.length}</span>{" "}
               keyword{keywords.length !== 1 ? "s" : ""}
+              {pageSpeedFailures > 0 && (
+                <span>
+                  {" "}· <span className="font-semibold text-zinc-300">{pageSpeedFailures}</span> PageSpeed failure{pageSpeedFailures !== 1 ? "s" : ""}
+                </span>
+              )}
               {diagnostics && typeof diagnostics.franchisesFiltered === "number" && diagnostics.franchisesFiltered > 0 && (
                 <span>
                   {" "}· <span className="font-semibold text-zinc-300">{String(diagnostics.franchisesFiltered)}</span> franchise{diagnostics.franchisesFiltered !== 1 ? "s" : ""} filtered
