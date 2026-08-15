@@ -47,6 +47,28 @@ export default function DashboardPage() {
   function toggleSelect(id: number) { setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
   function selectAll() { setSelectedIds(selectedIds.size === leads.length ? new Set() : new Set(leads.map(l => l.id))); }
   async function batchReject(reason: string) { const ids = Array.from(selectedIds); if (!ids.length) return; const res = await fetch("/api/leads/batch-reject", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, reason }) }); if (res.ok) { setSelectedIds(new Set()); refresh(); } }
+  async function bulkResearch() {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return "No leads selected.";
+    const res = await fetch("/api/leads/bulk-research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Bulk research failed");
+
+    const processedIds = new Set<number>((data.results ?? []).map((row: { id: number }) => row.id));
+    setSelectedIds(prev => new Set(Array.from(prev).filter(id => !processedIds.has(id))));
+    refresh();
+
+    const parts = [
+      `${data.researched ?? 0} researched`,
+      `${data.emailsDiscovered ?? 0} emails discovered`,
+      `${data.skippedNoEmail ?? 0} skipped without email`,
+    ];
+    if ((data.enrichmentDeferred ?? 0) > 0) parts.push(`${data.enrichmentDeferred} retry deferred`);
+    if ((data.enrichmentExhausted ?? 0) > 0) parts.push(`${data.enrichmentExhausted} enrichment exhausted`);
+    if ((data.researchFailed ?? 0) > 0) parts.push(`${data.researchFailed} research failed`);
+    if ((data.selectedForThisBatch ?? ids.length) < ids.length) parts.push(`${ids.length - data.selectedForThisBatch} remain selected for the next batch`);
+    return parts.join(" · ");
+  }
   async function deleteLead(id: number) { const res = await fetch(`/api/leads/${id}`, { method: "DELETE" }); if (res.ok) refresh(); }
   async function updateLead(id: number, updates: Record<string, unknown>) { const res = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(updates) }); if (res.ok) refresh(); }
 
@@ -57,6 +79,6 @@ export default function DashboardPage() {
       <Link href="/" className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">Run New Search</Link>
     </div></div>
     {stats && <DashboardStats stats={stats} />}<DashboardFilters filters={filters} onChange={handleFilterChange} />
-    <LeadTable leads={leads} loading={loading} onUpdate={updateLead} onDelete={deleteLead} selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onBatchReject={batchReject} onRefresh={refresh} />
+    <LeadTable leads={leads} loading={loading} onUpdate={updateLead} onDelete={deleteLead} selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onBatchReject={batchReject} onBulkResearch={bulkResearch} onRefresh={refresh} />
   </div></div>;
 }
