@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+
+const API_URL = process.env.LEAD_MINER_API_URL ?? "http://localhost:3001";
 
 export async function GET() {
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
-  const startOfTomorrow = new Date(startOfToday); startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
-  const sevenDaysOut = new Date(startOfToday); sevenDaysOut.setDate(sevenDaysOut.getDate() + 7);
-
-  const [overdue, dueToday, upcoming] = await Promise.all([
-    prisma.lead.count({ where: { followUpDate: { lt: startOfToday }, status: "contacted" } }),
-    prisma.lead.count({ where: { followUpDate: { gte: startOfToday, lte: endOfToday }, status: "contacted" } }),
-    prisma.lead.count({ where: { followUpDate: { gte: startOfTomorrow, lt: sevenDaysOut }, status: "contacted" } }),
-  ]);
-
-  return NextResponse.json({ overdue, dueToday, upcoming });
+  try {
+    const response = await fetch(`${API_URL}/api/leads/follow-up-summary`, { cache: "no-store" });
+    const text = await response.text();
+    let body: unknown = {};
+    if (text) {
+      try { body = JSON.parse(text); }
+      catch { body = { error: text }; }
+    }
+    return NextResponse.json(body, { status: response.status });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
+  }
 }
