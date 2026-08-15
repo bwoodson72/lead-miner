@@ -5,9 +5,9 @@ import Link from "next/link";
 
 type Settings = {
   autoResearch: boolean; autoDraftOutreach: boolean; approvalMode: "manual" | "shadow" | "auto_safe";
-  researchModel: string; outreachModel: string; researchInstructions: string; outreachInstructions: string;
+  researchModel: string; outreachModel: string; researchInstructions: string; outreachInstructions: string; followUpInstructions: string; replyInstructions: string;
   researchBatchSize: number; minAutoApprovePriority: number; minAutoApproveConfidence: number; minProblemConfidence: number;
-  dailySendLimit: number; sendWindowStart: string; sendWindowEnd: string; followUpDelaysDays: number[]; senderName: string; senderEmail: string;
+  dailySendLimit: number; sendWindowStart: string; sendWindowEnd: string; followUpDelaysDays: number[]; senderName: string; senderEmail: string; emailProvider: "resend" | "gmail";
 };
 
 export default function SettingsPage() {
@@ -26,13 +26,16 @@ export default function SettingsPage() {
     </div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">AI Models & Instructions</h2><div className="grid gap-4 md:grid-cols-2">
       <label className="block text-sm">Research model<input value={settings.researchModel} onChange={(e)=>setSettings({...settings,researchModel:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
-      <label className="block text-sm">Outreach model<input value={settings.outreachModel} onChange={(e)=>setSettings({...settings,outreachModel:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>{numberField("minProblemConfidence","Minimum problem confidence",0.01)}{numberField("minAutoApproveConfidence","Minimum auto-approval confidence",0.01)}{numberField("minAutoApprovePriority","Minimum auto-approval priority")}
+      <label className="block text-sm">Outreach / follow-up model<input value={settings.outreachModel} onChange={(e)=>setSettings({...settings,outreachModel:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>{numberField("minProblemConfidence","Minimum problem confidence",0.01)}{numberField("minAutoApproveConfidence","Minimum auto-approval confidence",0.01)}{numberField("minAutoApprovePriority","Minimum auto-approval priority")}
     </div>
     <div className="mt-5 space-y-4">
-      <label className="block text-sm">Research instructions<textarea rows={7} value={settings.researchInstructions} onChange={(e)=>setSettings({...settings,researchInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls what the AI prioritizes when researching and qualifying leads. Evidence and structured-output rules remain enforced in code.</span></label>
-      <label className="block text-sm">Outreach instructions<textarea rows={7} value={settings.outreachInstructions} onChange={(e)=>setSettings({...settings,outreachInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls tone, positioning, emphasis and CTA. Anti-invention and no-technical-metrics rules remain enforced in code.</span></label>
+      <label className="block text-sm">Research instructions<textarea rows={7} value={settings.researchInstructions} onChange={(e)=>setSettings({...settings,researchInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/></label>
+      <label className="block text-sm">Outreach instructions<textarea rows={7} value={settings.outreachInstructions} onChange={(e)=>setSettings({...settings,outreachInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/></label>
+      <label className="block text-sm">Follow-up instructions<textarea rows={8} value={settings.followUpInstructions} onChange={(e)=>setSettings({...settings,followUpInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls how each sequence step continues the existing thread. Evidence and anti-invention rules remain enforced in code.</span></label>
+      <label className="block text-sm">Reply classification instructions<textarea rows={6} value={settings.replyInstructions} onChange={(e)=>setSettings({...settings,replyInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls classification and recommended action. Lead Miner does not automatically answer interested prospects.</span></label>
     </div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Sending & Follow-ups</h2><div className="grid gap-4 md:grid-cols-2">
+      <label className="block text-sm">Email provider<select value={settings.emailProvider} onChange={(e)=>setSettings({...settings,emailProvider:e.target.value as Settings["emailProvider"]})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"><option value="resend">Resend</option><option value="gmail">Gmail / Google Workspace</option></select><span className="mt-1 block text-xs text-zinc-500">Gmail is required for automatic thread reply detection.</span></label>
       <label className="block text-sm">Sender name<input value={settings.senderName} onChange={(e)=>setSettings({...settings,senderName:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
       <label className="block text-sm">Sender email<input type="email" value={settings.senderEmail} onChange={(e)=>setSettings({...settings,senderEmail:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
       {numberField("dailySendLimit","Daily send limit")}
