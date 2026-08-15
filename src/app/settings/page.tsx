@@ -11,9 +11,57 @@ type Settings = {
 };
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings | null>(null); const [saving, setSaving] = useState(false); const [message, setMessage] = useState<string | null>(null);
-  useEffect(() => { fetch("/api/settings", { cache: "no-store" }).then(async (res) => { const data = await res.json(); if (!res.ok) throw new Error(data.error ?? "Failed to load settings"); setSettings({ ...data, followUpDelaysDays: Array.isArray(data.followUpDelaysDays) ? data.followUpDelaysDays : [4,6,10] }); }).catch((e) => setMessage(e instanceof Error ? e.message : String(e))); }, []);
-  async function save() { if (!settings) return; setSaving(true); setMessage(null); try { const res = await fetch("/api/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(settings) }); const data=await res.json(); if(!res.ok) throw new Error(data.error??"Failed to save settings"); setSettings({...data,followUpDelaysDays:Array.isArray(data.followUpDelaysDays)?data.followUpDelaysDays:settings.followUpDelaysDays}); setMessage("Settings saved."); } catch(e){setMessage(e instanceof Error?e.message:String(e));} finally{setSaving(false);} }
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savingInstructions, setSavingInstructions] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings", { cache: "no-store" }).then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load settings");
+      setSettings({ ...data, followUpDelaysDays: Array.isArray(data.followUpDelaysDays) ? data.followUpDelaysDays : [4,6,10] });
+    }).catch((e) => setMessage(e instanceof Error ? e.message : String(e)));
+  }, []);
+
+  async function save() {
+    if (!settings) return;
+    setSaving(true); setMessage(null);
+    try {
+      const res = await fetch("/api/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(settings) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.issues?.map((i: { path?: (string | number)[]; message?: string }) => `${i.path?.join(".")}: ${i.message}`).join("; ") || data.error || "Failed to save settings");
+      setSettings({...data,followUpDelaysDays:Array.isArray(data.followUpDelaysDays)?data.followUpDelaysDays:settings.followUpDelaysDays});
+      setMessage("Settings saved.");
+    } catch(e){setMessage(e instanceof Error?e.message:String(e));}
+    finally{setSaving(false);}
+  }
+
+  async function saveInstructions() {
+    if (!settings) return;
+    setSavingInstructions(true); setMessage(null);
+    const expected = {
+      researchInstructions: settings.researchInstructions,
+      outreachInstructions: settings.outreachInstructions,
+      followUpInstructions: settings.followUpInstructions,
+      replyInstructions: settings.replyInstructions,
+    };
+    try {
+      const res = await fetch("/api/settings/ai-instructions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(expected),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.issues?.map((i: { path?: (string | number)[]; message?: string }) => `${i.path?.join(".")}: ${i.message}`).join("; ") || data.error || "Failed to save AI instructions");
+      const mismatch = (Object.keys(expected) as Array<keyof typeof expected>).find((key) => data[key] !== expected[key]);
+      if (mismatch) throw new Error(`Database read-back did not match ${mismatch}. Instructions were not saved.`);
+      setSettings((current) => current ? { ...current, ...data } : current);
+      setMessage("AI instructions saved and verified in the database.");
+    } catch (e) { setMessage(e instanceof Error ? e.message : String(e)); }
+    finally { setSavingInstructions(false); }
+  }
+
   if(!settings) return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">{message??"Loading settings..."}</main>;
   const numberField=(key:keyof Settings,label:string,step=1)=><label className="block text-sm text-zinc-300">{label}<input type="number" step={step} value={settings[key] as number} onChange={(e)=>setSettings({...settings,[key]:Number(e.target.value)})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"/></label>;
   return <main className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-4xl px-4 py-8">
@@ -33,6 +81,7 @@ export default function SettingsPage() {
       <label className="block text-sm">Outreach instructions<textarea rows={7} value={settings.outreachInstructions} onChange={(e)=>setSettings({...settings,outreachInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/></label>
       <label className="block text-sm">Follow-up instructions<textarea rows={8} value={settings.followUpInstructions} onChange={(e)=>setSettings({...settings,followUpInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls how each sequence step continues the existing thread. Evidence and anti-invention rules remain enforced in code.</span></label>
       <label className="block text-sm">Reply classification instructions<textarea rows={6} value={settings.replyInstructions} onChange={(e)=>setSettings({...settings,replyInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls classification and recommended action. Lead Miner does not automatically answer interested prospects.</span></label>
+      <button disabled={savingInstructions} onClick={saveInstructions} className="rounded bg-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-600 disabled:opacity-50">{savingInstructions ? "Saving instructions..." : "Save AI instructions"}</button>
     </div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Sending & Follow-ups</h2><div className="grid gap-4 md:grid-cols-2">
       <label className="block text-sm">Email provider<select value={settings.emailProvider} onChange={(e)=>setSettings({...settings,emailProvider:e.target.value as Settings["emailProvider"]})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"><option value="resend">Resend</option><option value="gmail">Gmail / Google Workspace</option></select><span className="mt-1 block text-xs text-zinc-500">Gmail is required for automatic thread reply detection.</span></label>
@@ -43,6 +92,6 @@ export default function SettingsPage() {
       <label className="block text-sm">Send window end<input type="time" value={settings.sendWindowEnd} onChange={(e)=>setSettings({...settings,sendWindowEnd:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
       <label className="block text-sm">Follow-up delays (days, comma separated)<input value={settings.followUpDelaysDays.join(", ")} onChange={(e)=>setSettings({...settings,followUpDelaysDays:e.target.value.split(",").map(v=>Number(v.trim())).filter(v=>Number.isInteger(v)&&v>0)})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
     </div></section>
-    <button disabled={saving} onClick={save} className="rounded bg-indigo-600 px-5 py-2.5 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">{saving?"Saving...":"Save settings"}</button>
+    <button disabled={saving} onClick={save} className="rounded bg-indigo-600 px-5 py-2.5 text-sm font-medium hover:bg-indigo-500 disabled:opacity-50">{saving?"Saving...":"Save all settings"}</button>
   </div></main>;
 }
