@@ -18,3 +18,6 @@ export async function GET() { return proxy(); }
 export async function PUT(request: NextRequest) {
   return proxy({ method: "PUT", headers: { "Content-Type": "application/json" }, body: await request.text() });
 }
+export async function PATCH(request: NextRequest) {
+  return proxy({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: await request.text() });
+}
