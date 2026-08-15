@@ -34,6 +34,8 @@ export default function RootLayout({
             <Link href="/" className="text-sm text-zinc-400 hover:text-white transition-colors">Search</Link>
             <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-white transition-colors">Dashboard</Link>
             <Link href="/pipeline" className="text-sm text-zinc-400 hover:text-white transition-colors">Pipeline</Link>
+            <Link href="/outreach" className="text-sm text-zinc-400 hover:text-white transition-colors">Outreach</Link>
+            <Link href="/settings" className="text-sm text-zinc-400 hover:text-white transition-colors">Settings</Link>
           </div>
         </nav>
         {children}
