@@ -17,6 +17,9 @@ export async function POST(_request: NextRequest, context: { params: Promise<{ i
     cache: "no-store",
   });
   const body = await response.json().catch(() => ({ error: "Backend returned an invalid response" }));
+  if (!response.ok) {
+    console.warn(`[Lead Miner proxy] research lead ${id} failed ${response.status}:`, body);
+  }
   return NextResponse.json(body, { status: response.status });
 }
 
