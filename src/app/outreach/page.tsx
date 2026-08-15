@@ -29,6 +29,7 @@ export default function OutreachPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<Set<number>>(new Set());
+  const [backfilling, setBackfilling] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -43,6 +44,18 @@ export default function OutreachPage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  async function generateMissingDrafts() {
+    setBackfilling(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/outreach/review", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate missing drafts");
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBackfilling(false); }
+  }
 
   function edit(id: number, field: "subject" | "bodyText", value: string) {
     setMessages((prev) => prev.map((m) => m.id === id ? { ...m, [field]: value } : m));
@@ -67,48 +80,34 @@ export default function OutreachPage() {
 
   return <main className="min-h-screen bg-zinc-950 text-white">
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-8 flex items-center justify-between gap-4">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Outreach Review</h1>
           <p className="mt-1 text-sm text-zinc-400">AI-generated first-touch messages. Review and approve before sending automation is enabled.</p>
         </div>
-        <Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">Lead Dashboard</Link>
+        <div className="flex gap-2">
+          <button disabled={backfilling} onClick={generateMissingDrafts} className="rounded bg-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-600 disabled:opacity-50">{backfilling ? "Generating…" : "Generate Missing Drafts"}</button>
+          <Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700">Lead Dashboard</Link>
+        </div>
       </div>
 
       {error && <div className="mb-4 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</div>}
       {loading ? <div className="py-12 text-center text-zinc-400">Loading review queue...</div> : messages.length === 0 ? <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-8 text-center text-zinc-400">No outreach drafts are waiting for review.</div> : <div className="space-y-5">
         {messages.map((message) => <section key={message.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-lg font-semibold">{message.lead.businessName || message.lead.domain}</div>
-              <div className="text-sm text-zinc-500">{message.lead.domain} · {message.lead.email ?? "No email"}</div>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="rounded bg-indigo-500/15 px-2 py-1 text-indigo-300">Priority {message.lead.priorityScore ?? "—"}</span>
-              <span className={message.status === "approved" ? "rounded bg-emerald-500/15 px-2 py-1 text-emerald-300" : "rounded bg-amber-500/15 px-2 py-1 text-amber-300"}>{message.status}</span>
-            </div>
+            <div><div className="text-lg font-semibold">{message.lead.businessName || message.lead.domain}</div><div className="text-sm text-zinc-500">{message.lead.domain} · {message.lead.email ?? "No email"}</div></div>
+            <div className="flex items-center gap-2 text-xs"><span className="rounded bg-indigo-500/15 px-2 py-1 text-indigo-300">Priority {message.lead.priorityScore ?? "—"}</span><span className={message.status === "approved" ? "rounded bg-emerald-500/15 px-2 py-1 text-emerald-300" : "rounded bg-amber-500/15 px-2 py-1 text-amber-300"}>{message.status}</span></div>
           </div>
 
           <div className="mb-5 grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">Why this lead</div>
-              <p className="text-zinc-300">{message.lead.qualificationReason ?? message.lead.researchSummary}</p>
-              <div className="mt-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Selected angle</div>
-              <p className="mt-1 text-zinc-300">{message.angle ?? message.lead.primaryOutreachAngle ?? "—"}</p>
-            </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Evidence</div>
-              <div className="space-y-2">
-                {message.lead.problems.slice(0, 3).map((problem) => <div key={problem.id}><div className="font-medium text-zinc-300">{problem.title}</div><div className="text-xs text-zinc-500">{problem.evidence}</div></div>)}
-              </div>
-            </div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm"><div className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-500">Why this lead</div><p className="text-zinc-300">{message.lead.qualificationReason ?? message.lead.researchSummary}</p><div className="mt-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Selected angle</div><p className="mt-1 text-zinc-300">{message.angle ?? message.lead.primaryOutreachAngle ?? "—"}</p></div>
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm"><div className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Evidence</div><div className="space-y-2">{message.lead.problems.slice(0, 3).map((problem) => <div key={problem.id}><div className="font-medium text-zinc-300">{problem.title}</div><div className="text-xs text-zinc-500">{problem.evidence}</div></div>)}</div></div>
           </div>
 
           <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Subject</label>
           <input value={message.subject} onChange={(e) => edit(message.id, "subject", e.target.value)} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none" />
           <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-zinc-500">Message</label>
           <textarea value={message.bodyText} onChange={(e) => edit(message.id, "bodyText", e.target.value)} rows={8} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm leading-6 text-white focus:border-indigo-500 focus:outline-none" />
-
           <div className="mt-4 flex flex-wrap gap-2">
             <button disabled={saving.has(message.id)} onClick={() => update(message)} className="rounded bg-zinc-700 px-3 py-2 text-sm hover:bg-zinc-600 disabled:opacity-50">Save edits</button>
             <button disabled={saving.has(message.id)} onClick={() => update(message, "approved")} className="rounded bg-emerald-700 px-3 py-2 text-sm font-medium hover:bg-emerald-600 disabled:opacity-50">Approve</button>
