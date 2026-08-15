@@ -6,18 +6,20 @@ import type { Lead } from "@/app/dashboard/page";
 
 interface Props {
   leads: Lead[]; loading: boolean; onUpdate: (id: number, updates: Record<string, unknown>) => void; onDelete: (id: number) => void;
-  selectedIds: Set<number>; onToggleSelect: (id: number) => void; onSelectAll: () => void; onBatchReject: (reason: string) => void; onRefresh: () => void;
+  selectedIds: Set<number>; onToggleSelect: (id: number) => void; onSelectAll: () => void; onBatchReject: (reason: string) => void; onBulkResearch: () => Promise<string>; onRefresh: () => void;
 }
 
 const statuses = ["new", "research_pending", "qualified", "disqualified", "ready_for_outreach", "contacted", "followup_due", "replied", "interested", "call_scheduled", "proposal_sent", "won", "lost", "rejected"];
 
-export default function LeadTable({ leads, loading, onUpdate, onDelete, selectedIds, onToggleSelect, onSelectAll, onBatchReject, onRefresh }: Props) {
+export default function LeadTable({ leads, loading, onUpdate, onDelete, selectedIds, onToggleSelect, onSelectAll, onBatchReject, onBulkResearch, onRefresh }: Props) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [researching, setResearching] = useState<Set<number>>(new Set());
+  const [bulkResearching, setBulkResearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function research(id: number) {
-    setError(null); setResearching(prev => new Set(prev).add(id));
+    setError(null); setNotice(null); setResearching(prev => new Set(prev).add(id));
     try {
       const res = await fetch(`/api/leads/${id}/research`, { method: "POST" });
       const data = await res.json();
@@ -27,12 +29,20 @@ export default function LeadTable({ leads, loading, onUpdate, onDelete, selected
     finally { setResearching(prev => { const next = new Set(prev); next.delete(id); return next; }); }
   }
 
+  async function researchSelected() {
+    setError(null); setNotice(null); setBulkResearching(true);
+    try { setNotice(await onBulkResearch()); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { setBulkResearching(false); }
+  }
+
   if (loading) return <div className="py-12 text-center text-zinc-400">Loading leads...</div>;
   if (!leads.length) return <div className="py-12 text-center text-zinc-400">No leads found.</div>;
 
   return <div>
     {error && <div className="mb-3 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">{error}</div>}
-    {selectedIds.size > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2"><span className="text-sm">{selectedIds.size} selected</span><button onClick={() => onBatchReject("agency_managed")} className="rounded bg-orange-700 px-2 py-1 text-xs">Reject agency</button><button onClick={() => onBatchReject("national_chain")} className="rounded bg-orange-700 px-2 py-1 text-xs">Reject chain</button><button onClick={() => onBatchReject("other")} className="rounded bg-zinc-600 px-2 py-1 text-xs">Reject other</button></div>}
+    {notice && <div className="mb-3 rounded border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-300">{notice}</div>}
+    {selectedIds.size > 0 && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2"><span className="text-sm">{selectedIds.size} selected</span><button disabled={bulkResearching} onClick={researchSelected} className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium disabled:opacity-50">{bulkResearching ? "Preparing & researching…" : "Research selected"}</button><button onClick={() => onBatchReject("agency_managed")} className="rounded bg-orange-700 px-2 py-1 text-xs">Reject agency</button><button onClick={() => onBatchReject("national_chain")} className="rounded bg-orange-700 px-2 py-1 text-xs">Reject chain</button><button onClick={() => onBatchReject("other")} className="rounded bg-zinc-600 px-2 py-1 text-xs">Reject other</button></div>}
     <div className="overflow-x-auto rounded-lg border border-zinc-700"><table className="w-full text-left text-sm text-zinc-300"><thead className="bg-zinc-800 text-xs uppercase text-zinc-400"><tr>
       <th className="px-3 py-3"><input type="checkbox" checked={selectedIds.size === leads.length} onChange={onSelectAll}/></th><th className="px-3 py-3">Business</th><th className="px-3 py-3">Web</th><th className="px-3 py-3">AI priority</th><th className="px-3 py-3">Decision</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Actions</th>
     </tr></thead><tbody className="divide-y divide-zinc-800">
