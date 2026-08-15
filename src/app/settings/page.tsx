@@ -5,9 +5,9 @@ import Link from "next/link";
 
 type Settings = {
   autoResearch: boolean; autoDraftOutreach: boolean; approvalMode: "manual" | "shadow" | "auto_safe";
-  researchModel: string; outreachModel: string; researchBatchSize: number; minAutoApprovePriority: number;
-  minAutoApproveConfidence: number; minProblemConfidence: number; dailySendLimit: number; sendWindowStart: string;
-  sendWindowEnd: string; followUpDelaysDays: number[]; senderName: string; senderEmail: string;
+  researchModel: string; outreachModel: string; researchInstructions: string; outreachInstructions: string;
+  researchBatchSize: number; minAutoApprovePriority: number; minAutoApproveConfidence: number; minProblemConfidence: number;
+  dailySendLimit: number; sendWindowStart: string; sendWindowEnd: string; followUpDelaysDays: number[]; senderName: string; senderEmail: string;
 };
 
 export default function SettingsPage() {
@@ -17,16 +17,20 @@ export default function SettingsPage() {
   if(!settings) return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">{message??"Loading settings..."}</main>;
   const numberField=(key:keyof Settings,label:string,step=1)=><label className="block text-sm text-zinc-300">{label}<input type="number" step={step} value={settings[key] as number} onChange={(e)=>setSettings({...settings,[key]:Number(e.target.value)})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-white"/></label>;
   return <main className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-4xl px-4 py-8">
-    <div className="mb-8 flex items-center justify-between"><div><h1 className="text-2xl font-bold">Settings</h1><p className="mt-1 text-sm text-zinc-400">Runtime behavior is stored in PostgreSQL and takes effect without a redeploy.</p></div><div className="flex gap-2"><Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Dashboard</Link><Link href="/outreach" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Outreach</Link></div></div>
+    <div className="mb-8 flex items-center justify-between"><div><h1 className="text-2xl font-bold">Settings</h1><p className="mt-1 text-sm text-zinc-400">Runtime behavior and editable AI instructions are stored in PostgreSQL and take effect without a redeploy.</p></div><div className="flex gap-2"><Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Dashboard</Link><Link href="/outreach" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Outreach</Link></div></div>
     {message&&<div className="mb-4 rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm">{message}</div>}
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Automation</h2><div className="grid gap-4 md:grid-cols-2">
       <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={settings.autoResearch} onChange={(e)=>setSettings({...settings,autoResearch:e.target.checked})}/>Automatically research new leads</label>
       <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={settings.autoDraftOutreach} onChange={(e)=>setSettings({...settings,autoDraftOutreach:e.target.checked})}/>Automatically generate outreach drafts</label>
       <label className="block text-sm">Approval mode<select value={settings.approvalMode} onChange={(e)=>setSettings({...settings,approvalMode:e.target.value as Settings["approvalMode"]})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"><option value="manual">Manual</option><option value="shadow">Shadow</option><option value="auto_safe">Auto-approve safe drafts</option></select></label>{numberField("researchBatchSize","Manual/backfill research batch size")}
     </div></section>
-    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">AI</h2><div className="grid gap-4 md:grid-cols-2">
+    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">AI Models & Instructions</h2><div className="grid gap-4 md:grid-cols-2">
       <label className="block text-sm">Research model<input value={settings.researchModel} onChange={(e)=>setSettings({...settings,researchModel:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
       <label className="block text-sm">Outreach model<input value={settings.outreachModel} onChange={(e)=>setSettings({...settings,outreachModel:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>{numberField("minProblemConfidence","Minimum problem confidence",0.01)}{numberField("minAutoApproveConfidence","Minimum auto-approval confidence",0.01)}{numberField("minAutoApprovePriority","Minimum auto-approval priority")}
+    </div>
+    <div className="mt-5 space-y-4">
+      <label className="block text-sm">Research instructions<textarea rows={7} value={settings.researchInstructions} onChange={(e)=>setSettings({...settings,researchInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls what the AI prioritizes when researching and qualifying leads. Evidence and structured-output rules remain enforced in code.</span></label>
+      <label className="block text-sm">Outreach instructions<textarea rows={7} value={settings.outreachInstructions} onChange={(e)=>setSettings({...settings,outreachInstructions:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 leading-6 text-white"/><span className="mt-1 block text-xs text-zinc-500">Controls tone, positioning, emphasis and CTA. Anti-invention and no-technical-metrics rules remain enforced in code.</span></label>
     </div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Sending & Follow-ups</h2><div className="grid gap-4 md:grid-cols-2">
       <label className="block text-sm">Sender name<input value={settings.senderName} onChange={(e)=>setSettings({...settings,senderName:e.target.value})} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"/></label>
