@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import Link from "next/link";
 import type { Lead } from "@/app/dashboard/page";
 
 interface Props {
@@ -42,7 +43,7 @@ export default function LeadTable({ leads, loading, onUpdate, onDelete, selected
         <td className="px-3 py-3"><span className={lead.priorityScore != null && lead.priorityScore >= 70 ? "font-bold text-emerald-400" : "text-zinc-400"}>{lead.priorityScore ?? "—"}</span></td>
         <td className="px-3 py-3"><span className={lead.qualificationDecision === "qualified" ? "text-emerald-400" : lead.qualificationDecision === "disqualified" ? "text-red-400" : "text-zinc-500"}>{lead.qualificationDecision ?? "Not researched"}</span></td>
         <td className="px-3 py-3" onClick={e => e.stopPropagation()}><select value={lead.status} onChange={e => onUpdate(lead.id, { status: e.target.value })} className="rounded bg-zinc-800 px-2 py-1 text-xs">{statuses.map(s => <option key={s} value={s}>{s.replaceAll("_", " ")}</option>)}</select></td>
-        <td className="px-3 py-3" onClick={e => e.stopPropagation()}><div className="flex gap-2"><button disabled={researching.has(lead.id)} onClick={() => research(lead.id)} className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium disabled:opacity-50">{researching.has(lead.id) ? "Researching…" : lead.lastResearchedAt ? "Re-research" : "AI Research"}</button><button onClick={() => onUpdate(lead.id, { bumpOutreach: true })} className="rounded bg-zinc-700 px-2 py-1 text-xs">Log outreach</button><button onClick={() => window.confirm("Delete this lead permanently?") && onDelete(lead.id)} className="rounded bg-red-800 px-2 py-1 text-xs">Delete</button></div></td>
+        <td className="px-3 py-3" onClick={e => e.stopPropagation()}><div className="flex gap-2"><Link href={`/leads/${lead.id}`} className="rounded bg-emerald-700 px-2 py-1 text-xs font-medium hover:bg-emerald-600">View</Link><button disabled={researching.has(lead.id)} onClick={() => research(lead.id)} className="rounded bg-indigo-600 px-2 py-1 text-xs font-medium disabled:opacity-50">{researching.has(lead.id) ? "Researching…" : lead.lastResearchedAt ? "Re-research" : "AI Research"}</button><button onClick={() => onUpdate(lead.id, { bumpOutreach: true })} className="rounded bg-zinc-700 px-2 py-1 text-xs">Log outreach</button><button onClick={() => window.confirm("Delete this lead permanently?") && onDelete(lead.id)} className="rounded bg-red-800 px-2 py-1 text-xs">Delete</button></div></td>
       </tr>
       {expandedId === lead.id && <tr className="bg-zinc-950"><td colSpan={7} className="px-4 py-5"><div className="grid gap-5 md:grid-cols-2">
         <div><h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">AI research</h3>{lead.researchSummary ? <><p className="text-zinc-200">{lead.researchSummary}</p><p className="mt-3 text-sm"><span className="text-zinc-500">Why qualified:</span> {lead.qualificationReason}</p><p className="mt-2 text-sm"><span className="text-zinc-500">Primary angle:</span> {lead.primaryOutreachAngle ?? "None"}</p><p className="mt-2 text-xs text-zinc-600">Last researched {lead.lastResearchedAt ? new Date(lead.lastResearchedAt).toLocaleString() : "—"}</p></> : <p className="text-zinc-500">Run AI Research to inspect and qualify this prospect.</p>}</div>
