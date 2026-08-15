@@ -14,38 +14,43 @@ model Lead {
   landingPageUrl   String    @map("landing_page_url")
   keyword          String
   adSource         String    @default("local_organic") @map("ad_source")
-
   lighthouseScore  Int       @map("lighthouse_score")
   lcp              Int
   cls              Float?
   tbt              Int?
-
   email            String?
   phone            String?
   address          String?
   contactPageUrl   String?   @map("contact_page_url")
   enrichmentStatus String?   @map("enrichment_status")
   enrichmentNotes  String?   @map("enrichment_notes")
-
   status           String    @default("new")
   outreachCount    Int       @default(0) @map("outreach_count")
+  firstContactAt   DateTime? @map("first_contact_at")
   lastOutreachDate DateTime? @map("last_outreach_date")
-
   notes            Json      @default("[]")
-
   isAgencyManaged  Boolean   @default(false) @map("is_agency_managed")
   agencyName       String?   @map("agency_name")
   isNationalChain  Boolean   @default(false) @map("is_national_chain")
   chainReason      String?   @map("chain_reason")
   followUpDate     DateTime? @map("follow_up_date")
-
+  qualificationDecision String?   @map("qualification_decision")
+  qualificationReason   String?   @map("qualification_reason")
+  priorityScore         Int?      @map("priority_score")
+  primaryOutreachAngle  String?   @map("primary_outreach_angle")
+  researchSummary       String?   @map("research_summary")
+  researchVersion       String?   @map("research_version")
+  lastResearchedAt      DateTime? @map("last_researched_at")
+  replyStatus           String?   @map("reply_status")
+  replySummary          String?   @map("reply_summary")
+  lastReplyAt           DateTime? @map("last_reply_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
-
   @@index([status])
   @@index([lighthouseScore])
   @@index([isAgencyManaged])
   @@index([isNationalChain])
   @@index([followUpDate])
+  @@index([qualificationDecision, priorityScore])
   @@map("leads")
 }
