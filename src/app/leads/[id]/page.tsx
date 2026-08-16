@@ -27,7 +27,7 @@ export default function LeadDetailPage({ params }:{ params:Promise<{id:string}> 
   useEffect(()=>{ params.then(p=>setId(p.id)); },[params]);
   useEffect(()=>{ if(!id) return; (async()=>{ try{ const res=await fetch(`/api/leads/${id}/detail`,{cache:"no-store"}); const data=await res.json(); if(!res.ok) throw new Error(data.error??"Failed to load lead"); setLead(data.lead); }catch(e){setError(e instanceof Error?e.message:String(e));}finally{setLoading(false);} })(); },[id]);
 
-  async function revalidateEmail(){
+  async function revalidateContact(){
     if(!lead) return;
     setRevalidating(true); setContactMessage(null); setContactError(null);
     try{
@@ -38,10 +38,21 @@ export default function LeadDetailPage({ params }:{ params:Promise<{id:string}> 
       const detailData=await detailRes.json();
       if(!detailRes.ok) throw new Error(detailData.error??"Failed to reload lead");
       setLead(detailData.lead);
-      if(data.protected) setContactMessage("Existing email is not enrichment-sourced, so it was left unchanged.");
-      else if(data.identityChanged && data.email) setContactMessage(`Enriched email was replaced with ${data.email} after identity verification.`);
-      else if(data.identityChanged) setContactMessage("Enriched email failed identity verification and was removed. Unsent outreach using the old contact was cancelled.");
-      else setContactMessage(data.email ? `Enriched email passed identity verification: ${data.email}` : "No identity-verified email was found.");
+
+      if(data.protected){
+        setContactMessage("Existing contact data is not enrichment-sourced, so it was left unchanged.");
+      }else{
+        const results:string[]=[];
+        if(data.identityChanged && data.email) results.push(`Enriched email was replaced with ${data.email} after identity verification.`);
+        else if(data.identityChanged) results.push("Enriched email failed identity verification and was removed. Unsent outreach using the old email was cancelled.");
+        else if(data.email) results.push(`Enriched email passed identity verification: ${data.email}.`);
+        else results.push("No identity-verified email was found.");
+
+        if(data.phoneIdentityChanged && data.phone) results.push(`Phone was replaced with ${data.phone} from an identity-matched local-business listing.`);
+        else if(data.phoneRevalidated && data.phone) results.push(`Phone was revalidated against an identity-matched local-business listing: ${data.phone}.`);
+
+        setContactMessage(results.join(" "));
+      }
     }catch(e){ setContactError(e instanceof Error?e.message:String(e)); }
     finally{ setRevalidating(false); }
   }
@@ -67,7 +78,7 @@ export default function LeadDetailPage({ params }:{ params:Promise<{id:string}> 
 
     {lead.replyStatus&&<section className="mb-6 rounded-xl border border-emerald-900 bg-emerald-950/20 p-5"><h2 className="text-lg font-semibold text-emerald-300">Reply</h2><div className="mt-3 text-sm"><span className="text-zinc-500">Classification:</span> {lead.replyStatus}</div><p className="mt-2 leading-6 text-zinc-300">{lead.replySummary??"—"}</p><div className="mt-2 text-xs text-zinc-500">Last reply: {fmt(lead.lastReplyAt)}</div></section>}
 
-    <div className="mb-6 grid gap-6 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="text-lg font-semibold">AI jobs</h2><div className="mt-4 space-y-2">{lead.aiJobs.length===0?<p className="text-zinc-500">No AI jobs.</p>:lead.aiJobs.map(j=><div key={j.id} className="rounded bg-zinc-950 p-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium">{j.type}</span><span className="text-zinc-500">{j.status}</span></div><div className="mt-1 text-xs text-zinc-500">{j.model} · {j.promptVersion} · {fmt(j.createdAt)}</div>{(j.inputTokens!=null||j.outputTokens!=null)&&<div className="mt-1 text-xs text-zinc-500">Tokens: {j.inputTokens??0} in / {j.outputTokens??0} out · Cost {j.estimatedCost!=null?`$${j.estimatedCost.toFixed(4)}`:"—"}</div>}{j.error&&<div className="mt-2 text-xs text-red-300">{j.error}</div>}</div>)}</div></section><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Contact & source</h2>{lead.email&&<button type="button" onClick={revalidateEmail} disabled={revalidating} className="rounded border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs font-medium text-amber-200 disabled:cursor-not-allowed disabled:opacity-50">{revalidating?"Revalidating…":"Revalidate enriched email"}</button>}</div>{contactMessage&&<div className="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">{contactMessage}</div>}{contactError&&<div className="mt-3 rounded border border-red-900 bg-red-950/30 px-3 py-2 text-xs text-red-300">{contactError}</div>}<div className="mt-4 space-y-2 text-sm text-zinc-300"><div>{lead.email??"No email"}</div><div>{lead.phone??"No phone"}</div><div>{lead.address??"No address"}</div><div>Keyword: {lead.keyword}</div><div>Source: {lead.adSource}</div><div>Enrichment: {lead.enrichmentStatus??"—"}</div>{lead.isAgencyManaged&&<div className="text-orange-300">Agency managed: {lead.agencyName??"detected"}</div>}{lead.isNationalChain&&<div className="text-red-300">National chain: {lead.chainReason??"detected"}</div>}{lead.suppressions.length>0&&<div className="mt-4"><div className="text-xs uppercase text-zinc-500">Suppressions</div>{lead.suppressions.map(s=><div key={s.id} className="mt-1 text-red-300">{s.type}: {s.reason}</div>)}</div>}</div></section></div>
+    <div className="mb-6 grid gap-6 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="text-lg font-semibold">AI jobs</h2><div className="mt-4 space-y-2">{lead.aiJobs.length===0?<p className="text-zinc-500">No AI jobs.</p>:lead.aiJobs.map(j=><div key={j.id} className="rounded bg-zinc-950 p-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium">{j.type}</span><span className="text-zinc-500">{j.status}</span></div><div className="mt-1 text-xs text-zinc-500">{j.model} · {j.promptVersion} · {fmt(j.createdAt)}</div>{(j.inputTokens!=null||j.outputTokens!=null)&&<div className="mt-1 text-xs text-zinc-500">Tokens: {j.inputTokens??0} in / {j.outputTokens??0} out · Cost {j.estimatedCost!=null?`$${j.estimatedCost.toFixed(4)}`:"—"}</div>}{j.error&&<div className="mt-2 text-xs text-red-300">{j.error}</div>}</div>)}</div></section><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Contact & source</h2>{(lead.email||lead.phone)&&<button type="button" onClick={revalidateContact} disabled={revalidating} className="rounded border border-amber-700 bg-amber-950/40 px-3 py-2 text-xs font-medium text-amber-200 disabled:cursor-not-allowed disabled:opacity-50">{revalidating?"Revalidating…":"Revalidate enriched contact"}</button>}</div>{contactMessage&&<div className="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-300">{contactMessage}</div>}{contactError&&<div className="mt-3 rounded border border-red-900 bg-red-950/30 px-3 py-2 text-xs text-red-300">{contactError}</div>}<div className="mt-4 space-y-2 text-sm text-zinc-300"><div>{lead.email??"No email"}</div><div>{lead.phone??"No phone"}</div><div>{lead.address??"No address"}</div><div>Keyword: {lead.keyword}</div><div>Source: {lead.adSource}</div><div>Enrichment: {lead.enrichmentStatus??"—"}</div>{lead.isAgencyManaged&&<div className="text-orange-300">Agency managed: {lead.agencyName??"detected"}</div>}{lead.isNationalChain&&<div className="text-red-300">National chain: {lead.chainReason??"detected"}</div>}{lead.suppressions.length>0&&<div className="mt-4"><div className="text-xs uppercase text-zinc-500">Suppressions</div>{lead.suppressions.map(s=><div key={s.id} className="mt-1 text-red-300">{s.type}: {s.reason}</div>)}</div>}</div></section></div>
 
     <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="text-lg font-semibold">Activity timeline</h2><div className="mt-4 space-y-3">{lead.activities.length===0?<p className="text-zinc-500">No activity yet.</p>:lead.activities.map(a=><div key={a.id} className="border-l border-zinc-700 pl-4"><div className="text-sm font-medium text-zinc-200">{a.summary}</div><div className="mt-1 text-xs text-zinc-500">{a.type} · {fmt(a.createdAt)}</div></div>)}</div></section>
   </div></main>;
