@@ -7,7 +7,7 @@ type Settings = {
   autoResearch: boolean; autoDraftOutreach: boolean; approvalMode: "manual" | "shadow" | "auto_safe";
   researchModel: string; outreachModel: string; researchInstructions: string; outreachInstructions: string; followUpInstructions: string; replyInstructions: string;
   researchBatchSize: number; minAutoApprovePriority: number; minAutoApproveConfidence: number; minProblemConfidence: number;
-  dailySendLimit: number; sendWindowStart: string; sendWindowEnd: string; followUpDelaysDays: number[]; senderName: string; senderEmail: string; emailProvider: "resend" | "gmail";
+  dailySendLimit: number; sendWindowStart: string; sendWindowEnd: string; followUpDelaysDays: number[]; senderName: string; senderEmail: string;
 };
 
 type SaveSection = "automation" | "ai" | "sending";
@@ -48,7 +48,6 @@ export default function SettingsPage() {
       followUpInstructions: settings.followUpInstructions,
       replyInstructions: settings.replyInstructions,
     } : {
-      emailProvider: settings.emailProvider,
       senderName: settings.senderName,
       senderEmail: settings.senderEmail,
       dailySendLimit: settings.dailySendLimit,
@@ -101,8 +100,7 @@ export default function SettingsPage() {
       <button disabled={saving !== null} onClick={() => saveSection("ai")} className="rounded bg-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-600 disabled:opacity-50">{saving === "ai" ? "Saving..." : "Save AI settings"}</button>
     </div></section>
 
-    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Sending & Follow-ups</h2><div className="grid gap-4 md:grid-cols-2">
-      <label className="block text-sm">Email provider<select value={settings.emailProvider} onChange={(e) => setSettings({ ...settings, emailProvider: e.target.value as Settings["emailProvider"] })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2"><option value="resend">Resend</option><option value="gmail">Gmail / Google Workspace</option></select></label>
+    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Gmail Sending & Follow-ups</h2><div className="grid gap-4 md:grid-cols-2">
       <label className="block text-sm">Sender name<input value={settings.senderName} onChange={(e) => setSettings({ ...settings, senderName: e.target.value })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
       <label className="block text-sm">Sender email<input type="email" value={settings.senderEmail} onChange={(e) => setSettings({ ...settings, senderEmail: e.target.value })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
       {numberField("dailySendLimit", "Daily send limit")}
