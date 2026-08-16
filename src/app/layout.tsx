@@ -18,6 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <Link href="/inbox" className="text-sm text-zinc-400 transition-colors hover:text-white">Inbox</Link>
       <Link href="/analytics" className="text-sm text-zinc-400 transition-colors hover:text-white">Analytics</Link>
       <Link href="/automation" className="text-sm text-zinc-400 transition-colors hover:text-white">Automation</Link>
+      <Link href="/automation/errors" className="text-sm text-zinc-400 transition-colors hover:text-white">Errors</Link>
       <Link href="/settings" className="text-sm text-zinc-400 transition-colors hover:text-white">Settings</Link>
     </div></nav>
     {children}
