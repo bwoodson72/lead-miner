@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+const DEFAULT_FOLLOW_UP_DELAYS = [4, 6, 10, 14];
+
 type Settings = {
   autoResearch: boolean; autoDraftOutreach: boolean; approvalMode: "manual" | "shadow" | "auto_safe";
   researchModel: string; outreachModel: string; researchInstructions: string; outreachInstructions: string; followUpInstructions: string; replyInstructions: string;
@@ -11,6 +13,14 @@ type Settings = {
 };
 
 type SaveSection = "automation" | "ai" | "sending";
+
+function normalizeFollowUpDelays(value: unknown) {
+  const delays = Array.isArray(value) ? value : [];
+  return DEFAULT_FOLLOW_UP_DELAYS.map((fallback, index) => {
+    const candidate = Number(delays[index]);
+    return Number.isInteger(candidate) && candidate > 0 ? candidate : fallback;
+  });
+}
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -22,8 +32,9 @@ export default function SettingsPage() {
     const text = await res.text();
     const data = text ? JSON.parse(text) : {};
     if (!res.ok) throw new Error(data.error ?? "Failed to load settings");
-    setSettings({ ...data, followUpDelaysDays: Array.isArray(data.followUpDelaysDays) ? data.followUpDelaysDays : [4, 6, 10] });
-    return data as Settings;
+    const canonical = { ...data, followUpDelaysDays: normalizeFollowUpDelays(data.followUpDelaysDays) } as Settings;
+    setSettings(canonical);
+    return canonical;
   }
 
   useEffect(() => { load().catch((e) => setMessage(e instanceof Error ? e.message : String(e))); }, []);
@@ -76,6 +87,11 @@ export default function SettingsPage() {
 
   if (!settings) return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">{message ?? "Loading settings..."}</main>;
   const numberField = (key: keyof Settings, label: string, step = 1) => <label className="block text-sm text-zinc-300">{label}<input type="number" step={step} value={settings[key] as number} onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-white" /></label>;
+  const updateFollowUpDelay = (index: number, value: number) => {
+    const next = [...settings.followUpDelaysDays];
+    next[index] = value;
+    setSettings({ ...settings, followUpDelaysDays: next });
+  };
 
   return <main className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-4xl px-4 py-8">
     <div className="mb-8 flex items-center justify-between"><div><h1 className="text-2xl font-bold">Settings</h1><p className="mt-1 text-sm text-zinc-400">Each section saves independently and is verified against PostgreSQL.</p></div><div className="flex gap-2"><Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Dashboard</Link><Link href="/outreach" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Outreach</Link></div></div>
@@ -100,13 +116,13 @@ export default function SettingsPage() {
       <button disabled={saving !== null} onClick={() => saveSection("ai")} className="rounded bg-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-600 disabled:opacity-50">{saving === "ai" ? "Saving..." : "Save AI settings"}</button>
     </div></section>
 
-    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-4 font-semibold">Gmail Sending & Follow-ups</h2><div className="grid gap-4 md:grid-cols-2">
+    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="mb-1 font-semibold">Gmail Sending & Follow-ups</h2><p className="mb-4 text-sm text-zinc-400">Each outreach sequence has one initial email and exactly four follow-ups. Follow-up 4 is the terminal breakup message.</p><div className="grid gap-4 md:grid-cols-2">
       <label className="block text-sm">Sender name<input value={settings.senderName} onChange={(e) => setSettings({ ...settings, senderName: e.target.value })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
       <label className="block text-sm">Sender email<input type="email" value={settings.senderEmail} onChange={(e) => setSettings({ ...settings, senderEmail: e.target.value })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
       {numberField("dailySendLimit", "Daily send limit")}
       <label className="block text-sm">Send window start<input type="time" value={settings.sendWindowStart} onChange={(e) => setSettings({ ...settings, sendWindowStart: e.target.value })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
       <label className="block text-sm">Send window end<input type="time" value={settings.sendWindowEnd} onChange={(e) => setSettings({ ...settings, sendWindowEnd: e.target.value })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
-      <label className="block text-sm">Follow-up delays (days, comma separated)<input value={settings.followUpDelaysDays.join(", ")} onChange={(e) => setSettings({ ...settings, followUpDelaysDays: e.target.value.split(",").map((v) => Number(v.trim())).filter((v) => Number.isInteger(v) && v > 0) })} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>
+      <div className="md:col-span-2"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{settings.followUpDelaysDays.map((delay, index) => <label key={index} className="block text-sm">{index === 3 ? "Follow-up 4 breakup (days)" : `Follow-up ${index + 1} (days)`}<input type="number" min={1} max={90} step={1} value={delay} onChange={(e) => updateFollowUpDelay(index, Number(e.target.value))} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2" /></label>)}</div></div>
     </div><button disabled={saving !== null} onClick={() => saveSection("sending")} className="mt-5 rounded bg-indigo-700 px-4 py-2 text-sm font-medium hover:bg-indigo-600 disabled:opacity-50">{saving === "sending" ? "Saving..." : "Save sending settings"}</button></section>
   </div></main>;
 }
