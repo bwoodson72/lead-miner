@@ -43,7 +43,8 @@ export default function LeadDetailPage({ params }:{ params:Promise<{id:string}> 
         setContactMessage("Existing contact data is not enrichment-sourced, so it was left unchanged.");
       }else{
         const results:string[]=[];
-        if(data.identityChanged && data.email) results.push(`Enriched email was replaced with ${data.email} after identity verification.`);
+        if(data.emailProtected) results.push("Existing email is not enrichment-sourced, so it was left unchanged.");
+        else if(data.identityChanged && data.email) results.push(`Enriched email was replaced with ${data.email} after identity verification.`);
         else if(data.identityChanged) results.push("Enriched email failed identity verification and was removed. Unsent outreach using the old email was cancelled.");
         else if(data.email) results.push(`Enriched email passed identity verification: ${data.email}.`);
         else results.push("No identity-verified email was found.");
