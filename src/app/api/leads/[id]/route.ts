@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+function getApiBase() {
+  if (process.env.NODE_ENV === "development") {
+    return process.env.LEAD_MINER_DEV_API_URL ?? "http://localhost:3001";
+  }
+  return process.env.LEAD_MINER_API_URL ?? "http://localhost:3001";
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,18 +68,25 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const leadId = parseInt(id);
-  try {
-    await prisma.lead.delete({ where: { id: leadId } });
-    return NextResponse.json({ success: true, id: leadId });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Delete failed" },
-      { status: 404 }
-    );
+  const leadId = Number(id);
+  if (!Number.isInteger(leadId)) {
+    return NextResponse.json({ error: "Invalid lead id" }, { status: 400 });
   }
+
+  const apiBase = getApiBase();
+  console.log(`[Lead Miner proxy] delete lead ${leadId} -> ${apiBase}`);
+  const response = await fetch(`${apiBase}/api/leads/${leadId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({ error: "Backend returned an invalid response" }));
+  if (!response.ok) {
+    console.warn(`[Lead Miner proxy] delete lead ${leadId} failed ${response.status}:`, body);
+  }
+  return NextResponse.json(body, { status: response.status });
 }
