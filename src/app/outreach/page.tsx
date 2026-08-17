@@ -43,6 +43,13 @@ type RegenerationResult = {
   failed: number;
   results?: Array<{ messageId: number; leadId: number; kind: string; success: boolean; action?: string; error?: string }>;
 };
+type OutreachStrategyDetails = {
+  version?: string;
+  ownerStake: string;
+  buyerMoment: string | null;
+  psychologicalLever: string;
+  rationale?: string;
+};
 
 function sequenceLabel(message: Message) {
   if (message.kind === "initial") return "Initial";
@@ -50,6 +57,23 @@ function sequenceLabel(message: Message) {
   return n === 4 ? "Follow-up 4 · breakup" : `Follow-up ${n}`;
 }
 function pct(value: number | null) { return value == null ? "—" : `${Math.round(value * 100)}%`; }
+function psychologyLabel(value: string) { return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()); }
+function parseOutreachStrategyReason(value: string | null): OutreachStrategyDetails | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<OutreachStrategyDetails>;
+    if (typeof parsed.ownerStake !== "string" || typeof parsed.psychologicalLever !== "string") return null;
+    return {
+      version: typeof parsed.version === "string" ? parsed.version : undefined,
+      ownerStake: parsed.ownerStake,
+      buyerMoment: typeof parsed.buyerMoment === "string" ? parsed.buyerMoment : null,
+      psychologicalLever: parsed.psychologicalLever,
+      rationale: typeof parsed.rationale === "string" ? parsed.rationale : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export default function OutreachPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -146,7 +170,7 @@ export default function OutreachPage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Regeneration failed");
-      setNotice("Message regenerated with the current research, outreach angle, and prompt rules.");
+      setNotice("Message regenerated with the current research, outreach strategy, and prompt rules.");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -284,6 +308,7 @@ export default function OutreachPage() {
             {messages.map((message) => {
               const assessment = message.lead.assetAssessments?.[0];
               const selectedFinding = assessment?.findings.find((f) => f.id === message.lead.primaryOutreachFindingId) ?? assessment?.findings[0];
+              const strategyDetails = parseOutreachStrategyReason(message.lead.primaryOutreachAngleReason);
               return (
                 <section key={message.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
@@ -305,10 +330,19 @@ export default function OutreachPage() {
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-3">
                     <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Selected angle</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Selected observation</div>
                       <p className="mt-2 text-sm leading-6 text-zinc-300">{message.angle ?? message.lead.primaryOutreachAngle ?? "—"}</p>
                       <div className="mt-3 text-xs text-zinc-500">Angle confidence {pct(message.lead.primaryOutreachAngleConfidence)}</div>
-                      {message.lead.primaryOutreachAngleReason && <p className="mt-2 text-xs leading-5 text-zinc-500">{message.lead.primaryOutreachAngleReason}</p>}
+                      {strategyDetails ? (
+                        <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3 text-xs leading-5 text-zinc-400">
+                          <div><span className="font-medium text-zinc-300">Psychology:</span> {psychologyLabel(strategyDetails.psychologicalLever)}</div>
+                          <div><span className="font-medium text-zinc-300">Owner stake:</span> {strategyDetails.ownerStake}</div>
+                          {strategyDetails.buyerMoment && <div><span className="font-medium text-zinc-300">Buyer moment:</span> {strategyDetails.buyerMoment}</div>}
+                          {strategyDetails.rationale && <div className="text-zinc-500"><span className="font-medium text-zinc-400">Why this angle:</span> {strategyDetails.rationale}</div>}
+                        </div>
+                      ) : message.lead.primaryOutreachAngleReason ? (
+                        <p className="mt-2 text-xs leading-5 text-zinc-500">{message.lead.primaryOutreachAngleReason}</p>
+                      ) : null}
                     </div>
                     <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 lg:col-span-2">
                       <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Evidence</div>
@@ -333,6 +367,14 @@ export default function OutreachPage() {
                   <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-zinc-500">Message
                     <textarea rows={8} value={message.bodyText} onChange={(e) => edit(message.id, "bodyText", e.target.value)} className="mt-1 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-normal normal-case leading-6 text-white" />
                   </label>
+
+                  <details className="mt-3 rounded border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-400">
+                    <summary className="cursor-pointer text-xs font-medium text-zinc-500">Export-safe copy</summary>
+                    <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Subject</div>
+                    <p className="mt-1 text-sm text-zinc-200">{message.subject}</p>
+                    <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">Message</div>
+                    <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-zinc-200">{message.bodyText}</div>
+                  </details>
 
                   <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-500">
                     <span>Draft confidence {pct(message.confidence)}</span>
