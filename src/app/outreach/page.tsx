@@ -177,6 +177,7 @@ export default function OutreachPage() {
       const body = await res.json() as RegenerationResult & { error?: string };
       if (!res.ok) throw new Error(body.error ?? "Bulk regeneration failed");
       const failures = body.results?.filter((result) => !result.success) ?? [];
+      await load();
       if (failures.length) {
         const examples = failures.slice(0, 3).map((result) => `#${result.messageId}: ${result.error ?? "failed"}`).join(" · ");
         setError(`${body.succeeded} regenerated/cancelled; ${body.failed} failed. ${examples}`);
@@ -185,7 +186,6 @@ export default function OutreachPage() {
       } else {
         setNotice(`${body.succeeded} unsent message${body.succeeded === 1 ? "" : "s"} processed with the current outreach rules.`);
       }
-      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
