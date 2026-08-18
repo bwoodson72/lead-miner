@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import ProgressMeter from "@/components/progress-meter";
 
 type JobName = "sync_replies" | "enrich" | "research" | "prepare_outreach" | "reconcile_sends" | "followups" | "send_approved";
 type Run = { id:number; jobName:string; status:string; processed:number; succeeded:number; failed:number; errorSummary:string|null; startedAt:string; finishedAt:string|null; metadata?:{durationMs?:number;skippedReason?:string|null} };
@@ -13,6 +14,7 @@ type Status = {
   lastRuns:Record<JobName,Run|null>; recentRuns:Run[];
 };
 type MaintenanceResult={scanned:number;stale:number;processed:number;succeeded:number;failed:number;currentVersions:{initial:string;followup:string}};
+type ActiveProgress={jobName:JobName;label:string;queueKey:string|null;startTotal:number|null;processed:number|null;detail:string};
 
 const jobs:Array<{name:JobName;label:string;description:string}> = [
   {name:"sync_replies",label:"Sync replies",description:"Check Gmail threads and classify new inbound replies."},
@@ -23,15 +25,72 @@ const jobs:Array<{name:JobName;label:string;description:string}> = [
   {name:"followups",label:"Process follow-ups",description:"Generate and send eligible sequence follow-ups."},
   {name:"send_approved",label:"Send approved",description:"Send approved messages that are due and within policy."},
 ];
+const queueKeyByJob:Record<JobName,string|null>={
+  sync_replies:"unhandledReplies",
+  enrich:"pendingEnrichment",
+  research:"researchReady",
+  prepare_outreach:"qualifiedNeedsPreparation",
+  reconcile_sends:"sendingMessages",
+  followups:"followupsDue",
+  send_approved:"approvedMessages",
+};
 function fmt(value:string|null|undefined){return value?new Date(value).toLocaleString():"Never";}
 function money(value:number){return `$${value.toFixed(4)}`;}
 function statusClass(status:string){return status==="complete"?"text-emerald-300":status.includes("error")||status==="failed"?"text-red-300":status==="skipped"?"text-amber-300":"text-zinc-300";}
 
 export default function AutomationPage(){
-  const [data,setData]=useState<Status|null>(null); const [error,setError]=useState<string|null>(null); const [running,setRunning]=useState<JobName|null>(null); const [pausing,setPausing]=useState(false); const [maintaining,setMaintaining]=useState(false); const [maintenance,setMaintenance]=useState<MaintenanceResult|null>(null);
-  async function load(){const res=await fetch("/api/automation/status",{cache:"no-store"});const body=await res.json();if(!res.ok)throw new Error(body.error??"Failed to load automation status");setData(body);}
+  const [data,setData]=useState<Status|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [running,setRunning]=useState<JobName|null>(null);
+  const [activeProgress,setActiveProgress]=useState<ActiveProgress|null>(null);
+  const [pausing,setPausing]=useState(false);
+  const [maintaining,setMaintaining]=useState(false);
+  const [maintenance,setMaintenance]=useState<MaintenanceResult|null>(null);
+
+  async function fetchStatus(){
+    const res=await fetch("/api/automation/status",{cache:"no-store"});
+    const body=await res.json();
+    if(!res.ok)throw new Error(body.error??"Failed to load automation status");
+    return body as Status;
+  }
+  async function load(){setData(await fetchStatus());}
   useEffect(()=>{load().catch(e=>setError(e instanceof Error?e.message:String(e)));},[]);
-  async function run(jobName:JobName){setRunning(jobName);setError(null);try{const res=await fetch("/api/automation/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jobName})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Job failed");await load();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setRunning(null);}}
+
+  async function run(jobName:JobName){
+    if(!data)return;
+    const job=jobs.find(item=>item.name===jobName)!;
+    const queueKey=queueKeyByJob[jobName];
+    const startTotal=queueKey?data.queue[queueKey]??0:null;
+    setRunning(jobName);
+    setError(null);
+    setActiveProgress({jobName,label:job.label,queueKey,startTotal,processed:startTotal===0?0:null,detail:`Starting ${job.label.toLowerCase()}…`});
+    let poll:ReturnType<typeof setInterval>|null=null;
+    try{
+      poll=setInterval(async()=>{
+        try{
+          const next=await fetchStatus();
+          setData(next);
+          setActiveProgress(current=>{
+            if(!current||current.jobName!==jobName)return current;
+            if(!current.queueKey||current.startTotal==null)return {...current,detail:`${current.label} is running…`};
+            const remaining=next.queue[current.queueKey]??0;
+            const processed=Math.max(0,Math.min(current.startTotal,current.startTotal-remaining));
+            return {...current,processed,detail:`${processed} of ${current.startTotal} queued item${current.startTotal===1?"":"s"} completed`};
+          });
+        }catch{}
+      },1000);
+      const res=await fetch("/api/automation/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jobName})});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body.error??"Job failed");
+      setActiveProgress(current=>current?{...current,processed:current.startTotal,detail:`${job.label} complete`}:current);
+      await load();
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{
+      if(poll)clearInterval(poll);
+      setRunning(null);
+      setTimeout(()=>setActiveProgress(null),500);
+    }
+  }
   async function pause(paused:boolean){setPausing(true);setError(null);try{const res=await fetch("/api/automation/outreach-pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({paused})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Pause update failed");await load();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setPausing(false);}}
   async function regenerateLegacy(){if(!window.confirm("Regenerate all stale unsent outreach? Sent and sending messages will not be touched."))return;setMaintaining(true);setError(null);setMaintenance(null);try{const res=await fetch("/api/outreach/maintenance/regenerate-unsent",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope:"all",limit:500})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Legacy outreach regeneration failed");setMaintenance(body);await load();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setMaintaining(false);}}
   if(!data)return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">{error??"Loading automation…"}</main>;
@@ -39,6 +98,8 @@ export default function AutomationPage(){
   return <main className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-7xl px-4 py-8">
     <div className="mb-8 flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-bold">Automation</h1><p className="mt-1 text-sm text-zinc-400">Operational state, named jobs, budgets, and hard send controls.</p></div><div className="flex gap-2"><Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Dashboard</Link><Link href="/settings" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Settings</Link></div></div>
     {error&&<div className="mb-5 rounded border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
+    {activeProgress&&<div className="mb-5"><ProgressMeter label={activeProgress.label} detail={activeProgress.detail} processed={activeProgress.processed} total={activeProgress.startTotal} /></div>}
+    {maintaining&&<div className="mb-5"><ProgressMeter label="Outreach draft maintenance" detail="Regenerating stale unsent outreach…" /></div>}
     <div className="mb-6 grid gap-4 md:grid-cols-4"><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Automation</div><div className="mt-2 font-semibold">{data.automationEnabled?"Enabled":"Disabled"}</div></div><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Sending</div><div className="mt-2 font-semibold">{data.sendAutomationEnabled?"Enabled":"Disabled"}</div></div><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Research version</div><div className="mt-2 font-semibold">{data.researchVersion}</div></div><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Next expected tick</div><div className="mt-2 text-sm font-semibold">{fmt(data.nextExpectedRun)}</div></div></div>
     <section className={`mb-6 rounded-xl border p-5 ${data.outreachPaused?"border-red-800 bg-red-950/30":"border-zinc-800 bg-zinc-900"}`}><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Emergency outreach control</h2><p className="mt-1 text-sm text-zinc-400">Stops all new sends at the backend send boundary without stopping research.</p></div><button disabled={pausing} onClick={()=>pause(!data.outreachPaused)} className={`rounded px-4 py-2 text-sm font-semibold disabled:opacity-50 ${data.outreachPaused?"bg-emerald-700 hover:bg-emerald-600":"bg-red-800 hover:bg-red-700"}`}>{pausing?"Updating…":data.outreachPaused?"Resume outreach":"Pause outreach"}</button></div></section>
     <section className="mb-6 rounded-xl border border-amber-900/70 bg-amber-950/20 p-5"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Outreach draft maintenance</h2><p className="mt-1 max-w-3xl text-sm text-zinc-400">Regenerate stale unsent initial drafts using the current outreach prompt. Stale unsent follow-ups are cancelled and recreated by the normal follow-up job when due. Sent and sending messages are never changed.</p>{maintenance&&<p className="mt-2 text-sm text-emerald-300">Scanned {maintenance.scanned}; found {maintenance.stale} stale; {maintenance.succeeded} succeeded; {maintenance.failed} failed. Current: {maintenance.currentVersions.initial} / {maintenance.currentVersions.followup}.</p>}</div><button disabled={maintaining} onClick={regenerateLegacy} className="rounded bg-amber-700 px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50">{maintaining?"Regenerating…":"Regenerate unsent outreach"}</button></div></section>
