@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import ProgressMeter from "@/components/progress-meter";
+import { loadDashboardView, saveDashboardView } from "@/lib/dashboard-view-state";
 
 export type Lead = {
   id: number;
@@ -126,6 +127,19 @@ const statuses = [
 
 const decisions = ["", "rebuild_candidate", "no_material_opportunity", "needs_review"];
 
+const defaultFilters: Filters = {
+  search: "",
+  status: "",
+  qualificationDecision: "",
+  replyStatus: "",
+  minPriority: "",
+  hasEmail: "",
+  ads: "",
+  sortBy: "priorityScore",
+  sortDir: "desc",
+  pageSize: 50,
+};
+
 function label(value: string | null | undefined) {
   return value ? value.replaceAll("_", " ") : "—";
 }
@@ -180,18 +194,31 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false);
   const [activeBulkAction, setActiveBulkAction] = useState<BulkAction | null>(null);
   const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
-  const [filters, setFilters] = useState<Filters>({
-    search: "",
-    status: "",
-    qualificationDecision: "",
-    replyStatus: "",
-    minPriority: "",
-    hasEmail: "",
-    ads: "",
-    sortBy: "priorityScore",
-    sortDir: "desc",
-    pageSize: 50,
-  });
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+  const [viewRestored, setViewRestored] = useState(false);
+  const [restoreScrollY, setRestoreScrollY] = useState<number | null>(null);
+
+  useEffect(() => {
+    const restored = loadDashboardView(defaultFilters);
+    if (restored) {
+      setFilters(restored.filters);
+      setPage(restored.page);
+      setRestoreScrollY(restored.scrollY);
+    }
+    setViewRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!viewRestored) return;
+    saveDashboardView(filters, page);
+  }, [filters, page, viewRestored]);
+
+  useEffect(() => {
+    if (!viewRestored) return;
+    const remember = () => saveDashboardView(filters, page, window.scrollY);
+    window.addEventListener("pagehide", remember);
+    return () => window.removeEventListener("pagehide", remember);
+  }, [filters, page, viewRestored]);
 
   const query = useMemo(() => {
     const p = new URLSearchParams({
@@ -211,6 +238,7 @@ export default function DashboardPage() {
   }, [filters, page]);
 
   useEffect(() => {
+    if (!viewRestored) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -224,9 +252,14 @@ export default function DashboardPage() {
         if (!leadsRes.ok) throw new Error(leadData.error ?? "Lead query failed");
         if (!opsRes.ok) throw new Error(opsData.error ?? "Dashboard summary failed");
         if (!cancelled) {
+          const nextTotalPages = leadData.totalPages ?? 1;
+          if (page > nextTotalPages) {
+            setPage(Math.max(1, nextTotalPages));
+            return;
+          }
           setLeads(leadData.leads ?? []);
           setTotal(leadData.total ?? 0);
-          setTotalPages(leadData.totalPages ?? 1);
+          setTotalPages(nextTotalPages);
           setOperations(opsData);
           setSelected(new Set());
         }
@@ -239,11 +272,24 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [query, refreshKey]);
+  }, [viewRestored, query, refreshKey, page]);
+
+  useEffect(() => {
+    if (!viewRestored || loading || restoreScrollY === null) return;
+    const target = restoreScrollY;
+    setRestoreScrollY(null);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top: target, behavior: "auto" }));
+    });
+  }, [viewRestored, loading, restoreScrollY]);
 
   function change<K extends keyof Filters>(key: K, value: Filters[K]) {
     setPage(1);
     setFilters((f) => ({ ...f, [key]: value }));
+  }
+
+  function rememberViewPosition() {
+    saveDashboardView(filters, page, window.scrollY);
   }
 
   function toggle(id: number) {
@@ -546,7 +592,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-3"><div>{lastMessage ? `${lastMessage.kind} #${lastMessage.sequenceNumber} · ${lastMessage.status}` : "No outreach"}</div><div className="text-xs text-zinc-500">{lead.replyStatus ? `Reply: ${label(lead.replyStatus)}` : lead.followUpDate ? `Next ${fmt(lead.followUpDate)}` : "—"}</div></td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-1">
-                        <Link href={`/leads/${lead.id}`} className="rounded bg-zinc-700 px-2 py-1 text-xs">View</Link>
+                        <Link href={`/leads/${lead.id}`} onClick={rememberViewPosition} className="rounded bg-zinc-700 px-2 py-1 text-xs">View</Link>
                         <button disabled={busy} onClick={() => researchOne(lead.id)} className="rounded bg-indigo-700 px-2 py-1 text-xs">{lead.lastResearchedAt ? "Re-research" : "Research"}</button>
                         {lead.qualificationDecision === "rebuild_candidate" && <button disabled={busy} onClick={() => prepareOne(lead.id)} className="rounded bg-emerald-700 px-2 py-1 text-xs">Prepare</button>}
                       </div>
