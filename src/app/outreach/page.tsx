@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import ProgressMeter from "@/components/progress-meter";
 
 type Finding = { id: number; category: string; title: string; evidence: string; assetCapability: string; confidence: number; significance: string };
 type Assessment = { id: number; decision: string; assetStrength: string; confidence: number; findings: Finding[] };
@@ -50,6 +51,7 @@ type OutreachStrategyDetails = {
   psychologicalLever: string;
   rationale?: string;
 };
+type BulkProgress = { processed: number; total: number; succeeded: number; failed: number; detail: string };
 
 function sequenceLabel(message: Message) {
   if (message.kind === "initial") return "Initial";
@@ -90,6 +92,7 @@ export default function OutreachPage() {
   const [backfilling, setBackfilling] = useState(false);
   const [sendingAll, setSendingAll] = useState(false);
   const [regeneratingBulk, setRegeneratingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<BulkProgress | null>(null);
 
   async function load() {
     setLoading(true);
@@ -192,44 +195,64 @@ export default function OutreachPage() {
   }
 
   async function regenerateBulk(mode: "selected" | "stale") {
-    const ids = selectedMessages.map((message) => message.id);
-    if (mode === "selected" && !ids.length) return;
+    const targets = mode === "selected" ? selectedMessages : messages.filter((message) => message.kind === "initial");
+    if (!targets.length) {
+      setNotice(mode === "stale" ? "No unsent initial drafts are currently in the queue." : "No messages are selected.");
+      return;
+    }
     const prompt = mode === "selected"
-      ? `Regenerate ${ids.length} selected unsent message${ids.length === 1 ? "" : "s"} using the current outreach rules? Initial drafts will be rewritten now; selected follow-ups will be cancelled and regenerated when due.`
-      : "Regenerate every stale unsent initial draft using the current outreach rules? Sent messages will not be touched.";
+      ? `Regenerate ${targets.length} selected unsent message${targets.length === 1 ? "" : "s"} using the current outreach rules? Initial drafts will be rewritten now; selected follow-ups will be cancelled and regenerated when due.`
+      : `Scan ${targets.length} unsent initial draft${targets.length === 1 ? "" : "s"} and regenerate any that are stale or fail the current rules? Sent messages will not be touched.`;
     if (!window.confirm(prompt)) return;
 
     setRegeneratingBulk(true);
     setError(null);
     setNotice(null);
+    setBulkProgress({ processed: 0, total: targets.length, succeeded: 0, failed: 0, detail: mode === "selected" ? "Starting selected regeneration…" : "Scanning unsent initial drafts…" });
+
+    const aggregate: RegenerationResult = { scanned: 0, stale: 0, processed: 0, succeeded: 0, failed: 0, results: [] };
+    const chunkSize = 5;
     try {
-      const res = await fetch("/api/outreach/maintenance/regenerate-unsent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mode === "selected"
-          ? { scope: "all", ids, limit: Math.min(ids.length, 500), force: true }
-          : { scope: "initial", limit: 500, force: false }),
-      });
-      const body = await res.json() as RegenerationResult & { error?: string };
-      if (!res.ok) throw new Error(body.error ?? "Bulk regeneration failed");
-      const failures = body.results?.filter((result) => !result.success) ?? [];
-      const removals = body.results?.filter((result) => result.success && regenerationRemovalDecision(result.action)) ?? [];
+      for (let offset = 0; offset < targets.length; offset += chunkSize) {
+        const chunk = targets.slice(offset, offset + chunkSize);
+        const currentName = chunk[0]?.lead.businessName || chunk[0]?.lead.domain || "outreach drafts";
+        setBulkProgress((current) => current ? { ...current, detail: `${mode === "selected" ? "Regenerating" : "Checking"} ${currentName}…` } : current);
+        const res = await fetch("/api/outreach/maintenance/regenerate-unsent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: mode === "selected" ? "all" : "initial", ids: chunk.map((message) => message.id), limit: chunk.length, force: mode === "selected" }),
+        });
+        const body = await res.json() as RegenerationResult & { error?: string };
+        if (!res.ok) throw new Error(body.error ?? "Bulk regeneration failed");
+        aggregate.scanned += body.scanned ?? 0;
+        aggregate.stale += body.stale ?? 0;
+        aggregate.processed += body.processed ?? 0;
+        aggregate.succeeded += body.succeeded ?? 0;
+        aggregate.failed += body.failed ?? 0;
+        aggregate.results?.push(...(body.results ?? []));
+        const checked = Math.min(targets.length, offset + chunk.length);
+        setBulkProgress({ processed: checked, total: targets.length, succeeded: aggregate.succeeded, failed: aggregate.failed, detail: `${checked} of ${targets.length} drafts checked` });
+      }
+
+      const failures = aggregate.results?.filter((result) => !result.success) ?? [];
+      const removals = aggregate.results?.filter((result) => result.success && regenerationRemovalDecision(result.action)) ?? [];
       await load();
       if (failures.length) {
         const examples = failures.slice(0, 3).map((result) => `#${result.messageId}: ${result.error ?? "failed"}`).join(" · ");
-        setError(`${body.succeeded} regenerated/cancelled; ${body.failed} failed. ${examples}`);
-      } else if (body.processed === 0) {
-        setNotice(mode === "stale" ? "No stale unsent initial drafts were found." : "No selected messages needed processing.");
+        setError(`${aggregate.succeeded} regenerated/cancelled; ${aggregate.failed} failed. ${examples}`);
+      } else if (aggregate.processed === 0) {
+        setNotice(mode === "stale" ? "All unsent initial drafts already pass the current rules." : "No selected messages needed processing.");
       } else if (removals.length) {
         const decisions = [...new Set(removals.map((result) => regenerationRemovalDecision(result.action)).filter(Boolean))].join(", ");
-        setNotice(`${body.succeeded} unsent message${body.succeeded === 1 ? "" : "s"} processed. ${removals.length} lead${removals.length === 1 ? " was" : "s were"} removed from the outreach queue because fresh research no longer qualified ${removals.length === 1 ? "it" : "them"} for a custom rebuild${decisions ? ` (${decisions})` : ""}.`);
+        setNotice(`${aggregate.succeeded} unsent message${aggregate.succeeded === 1 ? "" : "s"} processed. ${removals.length} lead${removals.length === 1 ? " was" : "s were"} removed from the outreach queue because fresh research no longer qualified ${removals.length === 1 ? "it" : "them"} for a custom rebuild${decisions ? ` (${decisions})` : ""}.`);
       } else {
-        setNotice(`${body.succeeded} unsent message${body.succeeded === 1 ? "" : "s"} processed with the current outreach rules.`);
+        setNotice(`${aggregate.succeeded} unsent message${aggregate.succeeded === 1 ? "" : "s"} processed with the current outreach rules.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRegeneratingBulk(false);
+      setBulkProgress(null);
     }
   }
 
@@ -314,6 +337,7 @@ export default function OutreachPage() {
 
         {error && <div className="mb-5 rounded border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
         {notice && <div className="mb-5 rounded border border-emerald-900 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">{notice}</div>}
+        {bulkProgress && <div className="mb-5"><ProgressMeter label="Outreach maintenance" detail={bulkProgress.detail} processed={bulkProgress.processed} total={bulkProgress.total} succeeded={bulkProgress.succeeded} failed={bulkProgress.failed} /></div>}
 
         {loading ? (
           <div className="py-12 text-center text-zinc-400">Loading review queue…</div>
