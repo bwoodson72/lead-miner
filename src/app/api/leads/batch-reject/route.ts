@@ -1,31 +1,3 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-
-export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { ids, reason } = body;
-
-  if (!Array.isArray(ids) || ids.length === 0 || typeof reason !== "string") {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-  }
-
-  const validReasons = ["agency_managed", "national_chain", "not_a_business", "already_has_vendor", "bad_data", "other"];
-  if (!validReasons.includes(reason)) {
-    return NextResponse.json({ error: "Invalid reason" }, { status: 400 });
-  }
-
-  let count = 0;
-  for (const id of ids) {
-    const current = await prisma.lead.findUnique({ where: { id } });
-    if (!current) continue;
-    const existingNotes = (current.notes as Array<Record<string, string>>) ?? [];
-    existingNotes.push({ reason, rejectedAt: new Date().toISOString() });
-    await prisma.lead.update({
-      where: { id },
-      data: { status: "rejected", notes: existingNotes },
-    });
-    count++;
-  }
-
-  return NextResponse.json({ success: true, count });
-}
+import {NextRequest,NextResponse} from "next/server";
+const API_URL=process.env.LEAD_MINER_API_URL??"http://localhost:3001";
+export async function POST(request:NextRequest){try{const response=await fetch(`${API_URL}/api/leads/batch-reject`,{method:"POST",headers:{"Content-Type":"application/json"},body:await request.text(),cache:"no-store"});const text=await response.text();return NextResponse.json(text?JSON.parse(text):{},{status:response.status});}catch(error){return NextResponse.json({error:error instanceof Error?error.message:String(error)},{status:502});}}

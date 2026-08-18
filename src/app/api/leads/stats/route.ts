@@ -1,43 +1,44 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+
+const API_URL = process.env.LEAD_MINER_API_URL ?? "http://localhost:3001";
 
 export async function GET() {
-  const [total, newCount, contactedCount, respondedCount, proposalCount, wonCount, lostCount, withEmail, withPhone, rejectedCount, agencyCount, chainCount, followUpDueCount, paidAdCount] = await Promise.all([
-    prisma.lead.count(),
-    prisma.lead.count({ where: { status: "new" } }),
-    prisma.lead.count({ where: { status: "contacted" } }),
-    prisma.lead.count({ where: { status: "responded" } }),
-    prisma.lead.count({ where: { status: "proposal_sent" } }),
-    prisma.lead.count({ where: { status: "won" } }),
-    prisma.lead.count({ where: { status: "lost" } }),
-    prisma.lead.count({ where: { email: { not: null } } }),
-    prisma.lead.count({ where: { phone: { not: null } } }),
-    prisma.lead.count({ where: { status: "rejected" } }),
-    prisma.lead.count({ where: { isAgencyManaged: true } }),
-    prisma.lead.count({ where: { isNationalChain: true } }),
-    prisma.lead.count({ where: { followUpDate: { lte: new Date() }, status: "contacted" } }),
-    prisma.lead.count({ where: { adSource: "paid_ad" } }),
-  ]);
+  try {
+    const response = await fetch(`${API_URL}/api/dashboard/summary`, { cache: "no-store" });
+    const text = await response.text();
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "Backend dashboard summary failed", detail: text || response.statusText },
+        { status: response.status },
+      );
+    }
 
-  const avgResult = await prisma.lead.aggregate({
-    _avg: { lighthouseScore: true },
-  });
-
-  return NextResponse.json({
-    total,
-    new_count: newCount,
-    contacted_count: contactedCount,
-    responded_count: respondedCount,
-    proposal_sent_count: proposalCount,
-    won_count: wonCount,
-    lost_count: lostCount,
-    with_email: withEmail,
-    with_phone: withPhone,
-    avg_score: Math.round(avgResult._avg.lighthouseScore ?? 0),
-    rejected_count: rejectedCount,
-    agency_count: agencyCount,
-    chain_count: chainCount,
-    follow_up_due: followUpDueCount,
-    paid_ad_count: paidAdCount,
-  });
+    const summary = text ? JSON.parse(text) as Record<string, number> : {};
+    return NextResponse.json({
+      total: 0,
+      new_count: summary.newLeads ?? 0,
+      contacted_count: 0,
+      responded_count: summary.replies ?? 0,
+      proposal_sent_count: 0,
+      won_count: 0,
+      lost_count: 0,
+      with_email: 0,
+      with_phone: 0,
+      avg_score: 0,
+      rejected_count: 0,
+      agency_count: 0,
+      chain_count: 0,
+      follow_up_due: summary.followupsDue ?? 0,
+      paid_ad_count: 0,
+      qualified_count: summary.qualified ?? 0,
+      ready_for_outreach_count: summary.ready ?? 0,
+      interested_count: summary.interested ?? 0,
+      ai_failures: summary.aiFailures ?? 0,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Lead Miner API is unavailable", detail: error instanceof Error ? error.message : String(error) },
+      { status: 502 },
+    );
+  }
 }

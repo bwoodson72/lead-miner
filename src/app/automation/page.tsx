@@ -1,0 +1,110 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import ProgressMeter from "@/components/progress-meter";
+
+type JobName = "sync_replies" | "enrich" | "research" | "prepare_outreach" | "reconcile_sends" | "followups" | "send_approved";
+type Run = { id:number; jobName:string; status:string; processed:number; succeeded:number; failed:number; errorSummary:string|null; startedAt:string; finishedAt:string|null; metadata?:{durationMs?:number;skippedReason?:string|null} };
+type Status = {
+  automationEnabled:boolean; sendAutomationEnabled:boolean; outreachPaused:boolean; researchVersion:string; nextExpectedRun:string;
+  queue:Record<string,number>;
+  blocked:{outreachPaused:boolean;dailySendCapReached:boolean;dailySendRemaining:number;aiBudgetReached:boolean;aiBudgetReason:string|null;suppressedCount:number};
+  aiBudget:{dailySpent:number;monthlySpent:number;dailyLimit:number;monthlyLimit:number;dailyRemaining:number;monthlyRemaining:number;reached:boolean;reason:string|null};
+  lastRuns:Record<JobName,Run|null>; recentRuns:Run[];
+};
+type MaintenanceResult={scanned:number;stale:number;processed:number;succeeded:number;failed:number;currentVersions:{initial:string;followup:string}};
+type ActiveProgress={jobName:JobName;label:string;queueKey:string|null;startTotal:number|null;processed:number|null;detail:string};
+
+const jobs:Array<{name:JobName;label:string;description:string}> = [
+  {name:"sync_replies",label:"Sync replies",description:"Check Gmail threads and classify new inbound replies."},
+  {name:"enrich",label:"Enrich contacts",description:"Find and revalidate contact information for eligible leads."},
+  {name:"research",label:"Research leads",description:"Run business-asset research on research-ready leads."},
+  {name:"prepare_outreach",label:"Prepare outreach",description:"Prioritize qualified leads, select an angle, and generate drafts."},
+  {name:"reconcile_sends",label:"Reconcile sends",description:"Resolve stale/uncertain Gmail send attempts without duplicating mail."},
+  {name:"followups",label:"Process follow-ups",description:"Generate and send eligible sequence follow-ups."},
+  {name:"send_approved",label:"Send approved",description:"Send approved messages that are due and within policy."},
+];
+const queueKeyByJob:Record<JobName,string|null>={
+  sync_replies:"unhandledReplies",
+  enrich:"pendingEnrichment",
+  research:"researchReady",
+  prepare_outreach:"qualifiedNeedsPreparation",
+  reconcile_sends:"sendingMessages",
+  followups:"followupsDue",
+  send_approved:"approvedMessages",
+};
+function fmt(value:string|null|undefined){return value?new Date(value).toLocaleString():"Never";}
+function money(value:number){return `$${value.toFixed(4)}`;}
+function statusClass(status:string){return status==="complete"?"text-emerald-300":status.includes("error")||status==="failed"?"text-red-300":status==="skipped"?"text-amber-300":"text-zinc-300";}
+
+export default function AutomationPage(){
+  const [data,setData]=useState<Status|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [running,setRunning]=useState<JobName|null>(null);
+  const [activeProgress,setActiveProgress]=useState<ActiveProgress|null>(null);
+  const [pausing,setPausing]=useState(false);
+  const [maintaining,setMaintaining]=useState(false);
+  const [maintenance,setMaintenance]=useState<MaintenanceResult|null>(null);
+
+  async function fetchStatus(){
+    const res=await fetch("/api/automation/status",{cache:"no-store"});
+    const body=await res.json();
+    if(!res.ok)throw new Error(body.error??"Failed to load automation status");
+    return body as Status;
+  }
+  async function load(){setData(await fetchStatus());}
+  useEffect(()=>{load().catch(e=>setError(e instanceof Error?e.message:String(e)));},[]);
+
+  async function run(jobName:JobName){
+    if(!data)return;
+    const job=jobs.find(item=>item.name===jobName)!;
+    const queueKey=queueKeyByJob[jobName];
+    const startTotal=queueKey?data.queue[queueKey]??0:null;
+    setRunning(jobName);
+    setError(null);
+    setActiveProgress({jobName,label:job.label,queueKey,startTotal,processed:startTotal===0?0:null,detail:`Starting ${job.label.toLowerCase()}…`});
+    let poll:ReturnType<typeof setInterval>|null=null;
+    try{
+      poll=setInterval(async()=>{
+        try{
+          const next=await fetchStatus();
+          setData(next);
+          setActiveProgress(current=>{
+            if(!current||current.jobName!==jobName)return current;
+            if(!current.queueKey||current.startTotal==null)return {...current,detail:`${current.label} is running…`};
+            const remaining=next.queue[current.queueKey]??0;
+            const processed=Math.max(0,Math.min(current.startTotal,current.startTotal-remaining));
+            return {...current,processed,detail:`${processed} of ${current.startTotal} queued item${current.startTotal===1?"":"s"} completed`};
+          });
+        }catch{}
+      },1000);
+      const res=await fetch("/api/automation/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jobName})});
+      const body=await res.json();
+      if(!res.ok)throw new Error(body.error??"Job failed");
+      setActiveProgress(current=>current?{...current,processed:current.startTotal,detail:`${job.label} complete`}:current);
+      await load();
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{
+      if(poll)clearInterval(poll);
+      setRunning(null);
+      setTimeout(()=>setActiveProgress(null),500);
+    }
+  }
+  async function pause(paused:boolean){setPausing(true);setError(null);try{const res=await fetch("/api/automation/outreach-pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({paused})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Pause update failed");await load();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setPausing(false);}}
+  async function regenerateLegacy(){if(!window.confirm("Regenerate all stale unsent outreach? Sent and sending messages will not be touched."))return;setMaintaining(true);setError(null);setMaintenance(null);try{const res=await fetch("/api/outreach/maintenance/regenerate-unsent",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope:"all",limit:500})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Legacy outreach regeneration failed");setMaintenance(body);await load();}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setMaintaining(false);}}
+  if(!data)return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">{error??"Loading automation…"}</main>;
+  const queueLabels:Record<string,string>={pendingEnrichment:"Pending enrichment",researchReady:"Research ready",qualifiedNeedsPreparation:"Needs outreach prep",approvedMessages:"Approved messages",sendingMessages:"Sending",followupsDue:"Follow-ups due",unhandledReplies:"Unhandled replies",staleResearch:"Stale research"};
+  return <main className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-7xl px-4 py-8">
+    <div className="mb-8 flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-bold">Automation</h1><p className="mt-1 text-sm text-zinc-400">Operational state, named jobs, budgets, and hard send controls.</p></div><div className="flex gap-2"><Link href="/dashboard" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Dashboard</Link><Link href="/settings" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Settings</Link></div></div>
+    {error&&<div className="mb-5 rounded border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
+    {activeProgress&&<div className="mb-5"><ProgressMeter label={activeProgress.label} detail={activeProgress.detail} processed={activeProgress.processed} total={activeProgress.startTotal} /></div>}
+    {maintaining&&<div className="mb-5"><ProgressMeter label="Outreach draft maintenance" detail="Regenerating stale unsent outreach…" /></div>}
+    <div className="mb-6 grid gap-4 md:grid-cols-4"><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Automation</div><div className="mt-2 font-semibold">{data.automationEnabled?"Enabled":"Disabled"}</div></div><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Sending</div><div className="mt-2 font-semibold">{data.sendAutomationEnabled?"Enabled":"Disabled"}</div></div><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Research version</div><div className="mt-2 font-semibold">{data.researchVersion}</div></div><div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="text-xs uppercase text-zinc-500">Next expected tick</div><div className="mt-2 text-sm font-semibold">{fmt(data.nextExpectedRun)}</div></div></div>
+    <section className={`mb-6 rounded-xl border p-5 ${data.outreachPaused?"border-red-800 bg-red-950/30":"border-zinc-800 bg-zinc-900"}`}><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Emergency outreach control</h2><p className="mt-1 text-sm text-zinc-400">Stops all new sends at the backend send boundary without stopping research.</p></div><button disabled={pausing} onClick={()=>pause(!data.outreachPaused)} className={`rounded px-4 py-2 text-sm font-semibold disabled:opacity-50 ${data.outreachPaused?"bg-emerald-700 hover:bg-emerald-600":"bg-red-800 hover:bg-red-700"}`}>{pausing?"Updating…":data.outreachPaused?"Resume outreach":"Pause outreach"}</button></div></section>
+    <section className="mb-6 rounded-xl border border-amber-900/70 bg-amber-950/20 p-5"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-semibold">Outreach draft maintenance</h2><p className="mt-1 max-w-3xl text-sm text-zinc-400">Regenerate stale unsent initial drafts using the current outreach prompt. Stale unsent follow-ups are cancelled and recreated by the normal follow-up job when due. Sent and sending messages are never changed.</p>{maintenance&&<p className="mt-2 text-sm text-emerald-300">Scanned {maintenance.scanned}; found {maintenance.stale} stale; {maintenance.succeeded} succeeded; {maintenance.failed} failed. Current: {maintenance.currentVersions.initial} / {maintenance.currentVersions.followup}.</p>}</div><button disabled={maintaining} onClick={regenerateLegacy} className="rounded bg-amber-700 px-4 py-2 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50">{maintaining?"Regenerating…":"Regenerate unsent outreach"}</button></div></section>
+    <div className="mb-6 grid gap-4 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Queue</h2><div className="mt-4 grid grid-cols-2 gap-3">{Object.entries(data.queue).map(([key,value])=><div key={key} className="rounded bg-zinc-950 p-3"><div className="text-xs text-zinc-500">{queueLabels[key]??key}</div><div className="mt-1 text-xl font-semibold">{value}</div></div>)}</div></section><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">AI budget & send limits</h2><div className="mt-4 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Today</span><span>{money(data.aiBudget.dailySpent)} / {money(data.aiBudget.dailyLimit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Month</span><span>{money(data.aiBudget.monthlySpent)} / {money(data.aiBudget.monthlyLimit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Sends remaining today</span><span>{data.blocked.dailySendRemaining}</span></div><div className="flex justify-between"><span className="text-zinc-400">Suppressed contacts/domains</span><span>{data.blocked.suppressedCount}</span></div>{data.aiBudget.reached&&<div className="rounded border border-amber-800 bg-amber-950/30 p-3 text-amber-300">{data.aiBudget.reason}</div>}</div></section></div>
+    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Jobs</h2><div className="mt-4 grid gap-3 lg:grid-cols-2">{jobs.map(job=>{const last=data.lastRuns[job.name];return <div key={job.name} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-medium">{job.label}</div><p className="mt-1 text-xs leading-5 text-zinc-500">{job.description}</p></div><button disabled={running!==null} onClick={()=>run(job.name)} className="rounded bg-indigo-700 px-3 py-2 text-xs font-medium hover:bg-indigo-600 disabled:opacity-50">{running===job.name?"Running…":"Run now"}</button></div><div className="mt-3 text-xs text-zinc-500">Last: {fmt(last?.startedAt)}{last&&<> · <span className={statusClass(last.status)}>{last.status.replaceAll("_"," ")}</span> · {last.succeeded}/{last.processed} succeeded{last.failed?` · ${last.failed} failed`:""}</>}</div>{last?.errorSummary&&<div className="mt-2 text-xs text-red-300">{last.errorSummary}</div>}</div>})}</div></section>
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900"><div className="border-b border-zinc-800 px-5 py-4"><h2 className="font-semibold">Recent runs</h2></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-xs uppercase text-zinc-500"><tr><th className="px-4 py-3">Job</th><th className="px-4 py-3">Started</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Processed</th><th className="px-4 py-3">Duration</th></tr></thead><tbody className="divide-y divide-zinc-800">{data.recentRuns.map(run=><tr key={run.id}><td className="px-4 py-3">{run.jobName.replaceAll("_"," ")}</td><td className="px-4 py-3 text-zinc-400">{fmt(run.startedAt)}</td><td className={`px-4 py-3 ${statusClass(run.status)}`}>{run.status.replaceAll("_"," ")}</td><td className="px-4 py-3 text-zinc-400">{run.succeeded}/{run.processed}</td><td className="px-4 py-3 text-zinc-400">{run.metadata?.durationMs!=null?`${run.metadata.durationMs} ms`:"—"}</td></tr>)}</tbody></table></div></section>
+  </div></main>;
+}

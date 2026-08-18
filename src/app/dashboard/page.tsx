@@ -1,187 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
-import LeadTable from "@/components/lead-table";
-import DashboardFilters from "@/components/dashboard-filters";
-import DashboardStats from "@/components/dashboard-stats";
+import {useEffect,useMemo,useState} from "react";
 
-export type Lead = {
-  id: number;
-  domain: string;
-  businessName: string | null;
-  landingPageUrl: string;
-  keyword: string;
-  adSource: string;
-  lighthouseScore: number;
-  lcp: number;
-  cls: number | null;
-  tbt: number | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  contactPageUrl: string | null;
-  enrichmentStatus: string | null;
-  status: string;
-  outreachCount: number;
-  lastOutreachDate: string | null;
-  notes: Array<{ text: string; date: string }>;
-  isAgencyManaged: boolean;
-  agencyName: string | null;
-  isNationalChain: boolean;
-  chainReason: string | null;
-  followUpDate: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
+export type Lead={id:number;domain:string;businessName:string|null;landingPageUrl:string;keyword:string;adSource:string;lighthouseScore:number;lcp:number;cls:number|null;tbt:number|null;email:string|null;phone:string|null;address:string|null;contactPageUrl:string|null;enrichmentStatus:string|null;status:string;outreachCount:number;firstContactAt:string|null;lastOutreachDate:string|null;notes:Array<{text:string;date:string}>;isAgencyManaged:boolean;agencyName:string|null;isNationalChain:boolean;chainReason:string|null;followUpDate:string|null;qualificationDecision:string|null;qualificationReason:string|null;priorityScore:number|null;primaryOutreachAngle:string|null;researchSummary:string|null;researchVersion:string|null;lastResearchedAt:string|null;replyStatus:string|null;replySummary:string|null;lastReplyAt:string|null;createdAt:string;updatedAt:string;assetStrength?:string|null;assetAssessments?:Array<{assetStrength:string;decision:string;confidence:number;findings:Array<{id:number;title:string;category:string;confidence:number;significance:string}>}>;outreachMessages?:Array<{kind:string;sequenceNumber:number;status:string}>};
+type Operations={researchQueue:number;qualified:number;readyToSend:number;followupsDue:number;followupsOverdue:number;replies:number;interested:number;meetings:number;wins:number;failedJobs:number;lastRun:{jobName:string;status:string;startedAt:string}|null;aiBudget:{dailySpent:number;dailyLimit:number;monthlySpent:number;monthlyLimit:number;reached:boolean}};
+type Filters={search:string;status:string;qualificationDecision:string;replyStatus:string;minPriority:string;hasEmail:string;ads:string;sortBy:string;sortDir:string;pageSize:number};
+const statuses=["","new","research_pending","researching","qualified","disqualified","ready_for_outreach","held","contacted","replied","interested","call_scheduled","proposal_sent","won","lost","rejected","bounced","unsubscribed","closed_no_response"];
+const decisions=["","rebuild_candidate","optimization_candidate","no_material_opportunity","needs_review"];
+function label(value:string|null|undefined){return value?value.replaceAll("_"," "):"—";}function fmt(value:string|null|undefined){return value?new Date(value).toLocaleDateString():"—";}
 
-export type Filters = {
-  status: string;
-  adSource: string;
-  search: string;
-  hasEmail: boolean;
-  hasPhone: boolean;
-  sortBy: string;
-  sortDir: string;
-  hideRejected: boolean;
-  hideAgency: boolean;
-  hideChains: boolean;
-};
-
-export default function DashboardPage() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [stats, setStats] = useState<Record<string, number> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [filters, setFilters] = useState<Filters>({
-    status: "all",
-    adSource: "all",
-    search: "",
-    hasEmail: false,
-    hasPhone: false,
-    sortBy: "createdAt",
-    sortDir: "desc",
-    hideRejected: true,
-    hideAgency: false,
-    hideChains: false,
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const params = new URLSearchParams();
-    if (filters.status !== "all") params.set("status", filters.status);
-    if (filters.adSource !== "all") params.set("adSource", filters.adSource);
-    if (filters.search) params.set("search", filters.search);
-    if (filters.hasEmail) params.set("hasEmail", "true");
-    if (filters.hasPhone) params.set("hasPhone", "true");
-    if (filters.hideRejected) params.set("hideRejected", "true");
-    if (filters.hideAgency) params.set("hideAgency", "true");
-    if (filters.hideChains) params.set("hideChains", "true");
-    params.set("sortBy", filters.sortBy);
-    params.set("sortDir", filters.sortDir);
-
-    async function load() {
-      const [leadsRes, statsRes] = await Promise.all([
-        fetch("/api/leads?" + params.toString()),
-        fetch("/api/leads/stats"),
-      ]);
-      const [leadsData, statsData] = await Promise.all([
-        leadsRes.json(),
-        statsRes.json(),
-      ]);
-      if (!cancelled) {
-        setLeads(leadsData.leads ?? []);
-        setStats(statsData);
-        setLoading(false);
-      }
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, [filters, refreshKey]);
-
-  function handleFilterChange(newFilters: Filters) {
-    setLoading(true);
-    setFilters(newFilters);
-  }
-
-  function refresh() {
-    setLoading(true);
-    setRefreshKey(k => k + 1);
-  }
-
-  function toggleSelect(id: number) {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function selectAll() {
-    if (selectedIds.size === leads.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(leads.map(l => l.id)));
-    }
-  }
-
-  async function batchReject(reason: string) {
-    const ids = Array.from(selectedIds);
-    if (ids.length === 0) return;
-    const res = await fetch("/api/leads/batch-reject", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids, reason }),
-    });
-    if (res.ok) {
-      setSelectedIds(new Set());
-      refresh();
-    }
-  }
-
-  async function deleteLead(id: number) {
-    const res = await fetch(`/api/leads/${id}`, { method: "DELETE" });
-    if (res.ok) refresh();
-  }
-
-  async function updateLead(id: number, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/leads/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-    if (res.ok) refresh();
-  }
-
-  return (
-    <div className="min-h-screen bg-zinc-950 text-white">
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Lead Dashboard</h1>
-            <p className="mt-1 text-sm text-zinc-400">Manage and track your outreach pipeline</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <a
-              href={"/api/leads/export?" + (() => { const p = new URLSearchParams(); if (filters.status !== "all") p.set("status", filters.status); if (filters.adSource !== "all") p.set("adSource", filters.adSource); if (filters.search) p.set("search", filters.search); if (filters.hasEmail) p.set("hasEmail", "true"); if (filters.hasPhone) p.set("hasPhone", "true"); if (filters.hideRejected) p.set("hideRejected", "true"); if (filters.hideAgency) p.set("hideAgency", "true"); if (filters.hideChains) p.set("hideChains", "true"); return p.toString(); })()}
-              download
-              className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors"
-            >
-              Export CSV
-            </a>
-            <Link href="/" className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 transition-colors">
-              Run New Search
-            </Link>
-          </div>
-        </div>
-        {stats && <DashboardStats stats={stats} />}
-        <DashboardFilters filters={filters} onChange={handleFilterChange} />
-        <LeadTable leads={leads} loading={loading} onUpdate={updateLead} onDelete={deleteLead} selectedIds={selectedIds} onToggleSelect={toggleSelect} onSelectAll={selectAll} onBatchReject={batchReject} />
-      </div>
-    </div>
-  );
+export default function DashboardPage(){
+ const[leads,setLeads]=useState<Lead[]>([]);const[operations,setOperations]=useState<Operations|null>(null);const[loading,setLoading]=useState(true);const[error,setError]=useState<string|null>(null);const[selected,setSelected]=useState<Set<number>>(new Set());const[page,setPage]=useState(1);const[totalPages,setTotalPages]=useState(1);const[total,setTotal]=useState(0);const[refreshKey,setRefreshKey]=useState(0);const[busy,setBusy]=useState(false);const[filters,setFilters]=useState<Filters>({search:"",status:"",qualificationDecision:"",replyStatus:"",minPriority:"",hasEmail:"",ads:"",sortBy:"priorityScore",sortDir:"desc",pageSize:50});
+ const query=useMemo(()=>{const p=new URLSearchParams({page:String(page),pageSize:String(filters.pageSize),sortBy:filters.sortBy,sortDir:filters.sortDir});if(filters.search)p.set("search",filters.search);if(filters.status)p.set("status",filters.status);if(filters.qualificationDecision)p.set("qualificationDecision",filters.qualificationDecision);if(filters.replyStatus)p.set("replyStatus",filters.replyStatus);if(filters.minPriority)p.set("minPriority",filters.minPriority);if(filters.hasEmail)p.set("hasEmail",filters.hasEmail);if(filters.ads==="paid")p.set("ads","true");return p.toString();},[filters,page]);
+ useEffect(()=>{let cancelled=false;(async()=>{setLoading(true);setError(null);try{const[leadsRes,opsRes]=await Promise.all([fetch(`/api/leads/query?${query}`,{cache:"no-store"}),fetch("/api/dashboard/operations",{cache:"no-store"})]);const[leadData,opsData]=await Promise.all([leadsRes.json(),opsRes.json()]);if(!leadsRes.ok)throw new Error(leadData.error??"Lead query failed");if(!opsRes.ok)throw new Error(opsData.error??"Dashboard summary failed");if(!cancelled){setLeads(leadData.leads??[]);setTotal(leadData.total??0);setTotalPages(leadData.totalPages??1);setOperations(opsData);setSelected(new Set());}}catch(e){if(!cancelled)setError(e instanceof Error?e.message:String(e));}finally{if(!cancelled)setLoading(false);}})();return()=>{cancelled=true};},[query,refreshKey]);
+ function change<K extends keyof Filters>(key:K,value:Filters[K]){setPage(1);setFilters(f=>({...f,[key]:value}));}
+ function toggle(id:number){setSelected(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}function selectPage(){setSelected(selected.size===leads.length?new Set():new Set(leads.map(l=>l.id)));}
+ async function bulk(action:string,extra:Record<string,unknown>={}){if(!selected.size)return;setBusy(true);setError(null);try{const res=await fetch("/api/leads/bulk-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:Array.from(selected),action,...extra})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Bulk action failed");setRefreshKey(k=>k+1);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ async function researchSelected(){if(!selected.size)return;setBusy(true);try{const res=await fetch("/api/leads/bulk-research",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:Array.from(selected)})});const body=await res.json();if(!res.ok)throw new Error(body.error??"Research failed");setRefreshKey(k=>k+1);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ async function researchOne(id:number){setBusy(true);try{const res=await fetch(`/api/leads/${id}/research`,{method:"POST"});const body=await res.json();if(!res.ok)throw new Error(body.error??"Research failed");setRefreshKey(k=>k+1);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ async function prepareOne(id:number){setBusy(true);try{const res=await fetch("/api/leads/bulk-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[id],action:"prepare_outreach"})});const body=await res.json();if(!res.ok||body.failed)throw new Error(body.results?.[0]?.error??body.error??"Outreach preparation failed");setRefreshKey(k=>k+1);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
+ const cards=operations?[['Research queue',operations.researchQueue],['Qualified',operations.qualified],['Ready to send',operations.readyToSend],['Follow-ups due',operations.followupsDue],['Overdue',operations.followupsOverdue],['Replies',operations.replies],['Interested',operations.interested],['Meetings',operations.meetings],['Won',operations.wins]]:[];
+ return <main className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-[1500px] px-4 py-8"><div className="mb-7 flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-bold">Lead Miner</h1><p className="mt-1 text-sm text-zinc-400">Operational pipeline and prioritized prospect queue.</p></div><div className="flex flex-wrap gap-2"><Link href="/outreach" className="rounded bg-indigo-700 px-3 py-2 text-sm">Outreach</Link><Link href="/inbox" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Inbox</Link><Link href="/automation" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Automation</Link><Link href="/analytics" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Analytics</Link><Link href="/settings" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">Settings</Link><Link href="/" className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">New search</Link></div></div>
+ {error&&<div className="mb-4 rounded border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
+ <div className="mb-5 grid gap-3 grid-cols-2 md:grid-cols-5 lg:grid-cols-9">{cards.map(([name,value])=><div key={String(name)} className="rounded-lg border border-zinc-800 bg-zinc-900 p-3"><div className="text-xl font-semibold">{value}</div><div className="text-xs text-zinc-500">{name}</div></div>)}</div>
+ {operations&&<div className="mb-5 flex flex-wrap gap-4 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-xs text-zinc-400"><span>AI today ${operations.aiBudget.dailySpent.toFixed(4)} / ${operations.aiBudget.dailyLimit.toFixed(2)}</span><span>Month ${operations.aiBudget.monthlySpent.toFixed(4)} / ${operations.aiBudget.monthlyLimit.toFixed(2)}</span><span>Failed AI jobs {operations.failedJobs}</span><span>Last automation: {operations.lastRun?`${label(operations.lastRun.jobName)} · ${label(operations.lastRun.status)}`:"never"}</span>{operations.aiBudget.reached&&<span className="text-amber-300">AI budget reached</span>}</div>}
+ <section className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4"><div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6"><input placeholder="Business, domain, keyword" value={filters.search} onChange={e=>change("search",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"/><select value={filters.status} onChange={e=>change("status",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">{statuses.map(v=><option key={v} value={v}>{v?label(v):"All statuses"}</option>)}</select><select value={filters.qualificationDecision} onChange={e=>change("qualificationDecision",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">{decisions.map(v=><option key={v} value={v}>{v?label(v):"All decisions"}</option>)}</select><select value={filters.replyStatus} onChange={e=>change("replyStatus",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"><option value="">All reply states</option>{["interested","question","objection","not_now","not_interested","wrong_person","referral","out_of_office","bounce","unsubscribe","booking_intent","other"].map(v=><option key={v}>{v}</option>)}</select><input type="number" min={0} max={100} placeholder="Min priority" value={filters.minPriority} onChange={e=>change("minPriority",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"/><select value={filters.hasEmail} onChange={e=>change("hasEmail",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"><option value="">Any contactability</option><option value="true">Has email</option><option value="false">No email</option></select><select value={filters.ads} onChange={e=>change("ads",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"><option value="">Any acquisition source</option><option value="paid">Paid ads</option></select><select value={filters.sortBy} onChange={e=>change("sortBy",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">{[["priorityScore","Priority"],["createdAt","Created"],["lcp","LCP"],["followUpDate","Next follow-up"],["lastOutreachDate","Last outreach"],["lastReplyAt","Last reply"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select><select value={filters.sortDir} onChange={e=>change("sortDir",e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"><option value="desc">Descending</option><option value="asc">Ascending</option></select></div></section>
+ {selected.size>0&&<div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-indigo-800 bg-indigo-950/30 px-4 py-3"><span className="mr-2 text-sm">{selected.size} selected</span><button disabled={busy} onClick={researchSelected} className="rounded bg-indigo-700 px-2 py-1 text-xs">Research</button><button disabled={busy} onClick={()=>bulk("prepare_outreach")} className="rounded bg-emerald-700 px-2 py-1 text-xs">Prepare outreach</button><button disabled={busy} onClick={()=>bulk("qualify",{qualificationDecision:"rebuild_candidate"})} className="rounded bg-sky-700 px-2 py-1 text-xs">Qualify rebuild</button><button disabled={busy} onClick={()=>bulk("qualify",{qualificationDecision:"optimization_candidate"})} className="rounded bg-sky-700 px-2 py-1 text-xs">Qualify optimization</button><button disabled={busy} onClick={()=>bulk("disqualify")} className="rounded bg-zinc-700 px-2 py-1 text-xs">Disqualify</button><button disabled={busy} onClick={()=>bulk("hold")} className="rounded bg-amber-800 px-2 py-1 text-xs">Hold</button><button disabled={busy} onClick={()=>bulk("reject")} className="rounded bg-red-800 px-2 py-1 text-xs">Reject</button></div>}
+ <div className="overflow-x-auto rounded-xl border border-zinc-800"><table className="w-full text-left text-sm"><thead className="bg-zinc-900 text-xs uppercase text-zinc-500"><tr><th className="px-3 py-3"><input type="checkbox" checked={leads.length>0&&selected.size===leads.length} onChange={selectPage}/></th><th className="px-3 py-3">Business</th><th className="px-3 py-3">Priority</th><th className="px-3 py-3">Opportunity</th><th className="px-3 py-3">Asset</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Contact</th><th className="px-3 py-3">Sequence / reply</th><th className="px-3 py-3">Actions</th></tr></thead><tbody className="divide-y divide-zinc-800 bg-zinc-950">{loading?<tr><td colSpan={9} className="p-10 text-center text-zinc-500">Loading…</td></tr>:leads.map(lead=>{const assessment=lead.assetAssessments?.[0];const lastMessage=lead.outreachMessages?.[0];return <tr key={lead.id} className="hover:bg-zinc-900/60"><td className="px-3 py-3"><input type="checkbox" checked={selected.has(lead.id)} onChange={()=>toggle(lead.id)}/></td><td className="px-3 py-3"><div className="font-medium text-white">{lead.businessName||lead.domain}</div><div className="text-xs text-zinc-500">{lead.domain} · {lead.keyword}</div></td><td className="px-3 py-3 text-lg font-semibold">{lead.priorityScore??"—"}</td><td className="px-3 py-3"><div className="capitalize">{label(lead.qualificationDecision)}</div><div className="text-xs text-zinc-500">{lead.lastResearchedAt?`researched ${fmt(lead.lastResearchedAt)}`:"not researched"}</div></td><td className="px-3 py-3 capitalize">{assessment?.assetStrength??lead.assetStrength??"—"}</td><td className="px-3 py-3 capitalize">{label(lead.status)}</td><td className="px-3 py-3"><div>{lead.email??"No email"}</div><div className="text-xs text-zinc-500">{lead.phone??"No phone"}</div></td><td className="px-3 py-3"><div>{lastMessage?`${lastMessage.kind} #${lastMessage.sequenceNumber} · ${lastMessage.status}`:"No outreach"}</div><div className="text-xs text-zinc-500">{lead.replyStatus?`Reply: ${label(lead.replyStatus)}`:lead.followUpDate?`Next ${fmt(lead.followUpDate)}`:"—"}</div></td><td className="px-3 py-3"><div className="flex flex-wrap gap-1"><Link href={`/leads/${lead.id}`} className="rounded bg-zinc-700 px-2 py-1 text-xs">View</Link><button disabled={busy} onClick={()=>researchOne(lead.id)} className="rounded bg-indigo-700 px-2 py-1 text-xs">{lead.lastResearchedAt?"Re-research":"Research"}</button>{["rebuild_candidate","optimization_candidate"].includes(lead.qualificationDecision??"")&&<button disabled={busy} onClick={()=>prepareOne(lead.id)} className="rounded bg-emerald-700 px-2 py-1 text-xs">Prepare</button>}</div></td></tr>})}</tbody></table></div>
+ <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-zinc-400"><span>{total.toLocaleString()} leads · page {page} of {totalPages}</span><div className="flex gap-2"><button disabled={page<=1} onClick={()=>setPage(p=>p-1)} className="rounded border border-zinc-700 px-3 py-2 disabled:opacity-40">Previous</button><button disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)} className="rounded border border-zinc-700 px-3 py-2 disabled:opacity-40">Next</button></div></div>
+ </div></main>;
 }

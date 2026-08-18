@@ -5,6 +5,7 @@ import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeywordInputSchema, type KeywordInput, type LeadRecord } from "@/lib/schemas";
 import { getApiUrl } from "@/lib/env";
+import ProgressMeter from "@/components/progress-meter";
 
 interface ResultsData {
   leads: LeadRecord[];
@@ -16,10 +17,25 @@ interface KeywordFormProps {
   onResults: (data: ResultsData) => void;
 }
 
+function overallProgress(stage: string | null, detail: string | null) {
+  if (!stage) return null;
+  const count = detail?.match(/(\d+)\s+of\s+(\d+)/i);
+  const ratio = count && Number(count[2]) > 0 ? Number(count[1]) / Number(count[2]) : null;
+  if (stage === "starting") return 2;
+  if (stage === "searching") return 10;
+  if (stage === "analyzing") return ratio == null ? 25 : 20 + ratio * 35;
+  if (stage === "enriching") return ratio == null ? 60 : 55 + ratio * 20;
+  if (stage === "saving") return 78;
+  if (stage === "researching") return ratio == null ? 85 : 80 + ratio * 18;
+  if (stage === "complete") return 100;
+  return null;
+}
+
 export default function KeywordForm({ onResults }: KeywordFormProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const [progressStage, setProgressStage] = useState<string | null>(null);
 
   const {
     register,
@@ -40,6 +56,7 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
     setLoading(true);
     setErrorMsg(null);
     setProgress(null);
+    setProgressStage("starting");
 
     const apiUrl = getApiUrl();
 
@@ -84,10 +101,12 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
 
           if (job.progress) {
             setProgress(job.progress.detail);
+            setProgressStage(job.progress.stage ?? null);
           }
 
           if (job.status === "complete") {
             clearInterval(pollInterval);
+            setProgressStage("complete");
             onResults({
               leads: job.leads ?? [],
               keywords: job.keywords ?? [],
@@ -151,120 +170,43 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
           <label htmlFor="performanceScore" className="block mb-1.5 text-sm font-medium text-zinc-300">
             Min Performance Score
           </label>
-          <input
-            id="performanceScore"
-            type="number"
-            {...register("performanceScore", { valueAsNumber: true })}
-            className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          {errors.performanceScore && (
-            <p className="mt-1 text-xs text-red-400">{errors.performanceScore.message}</p>
-          )}
+          <input id="performanceScore" type="number" {...register("performanceScore", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          {errors.performanceScore && <p className="mt-1 text-xs text-red-400">{errors.performanceScore.message}</p>}
         </div>
-
         <div>
-          <label htmlFor="lcp" className="block mb-1.5 text-sm font-medium text-zinc-300">
-            LCP Threshold (ms)
-          </label>
-          <input
-            id="lcp"
-            type="number"
-            {...register("lcp", { valueAsNumber: true })}
-            className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          {errors.lcp && (
-            <p className="mt-1 text-xs text-red-400">{errors.lcp.message}</p>
-          )}
+          <label htmlFor="lcp" className="block mb-1.5 text-sm font-medium text-zinc-300">LCP Threshold (ms)</label>
+          <input id="lcp" type="number" {...register("lcp", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          {errors.lcp && <p className="mt-1 text-xs text-red-400">{errors.lcp.message}</p>}
         </div>
-
         <div>
-          <label htmlFor="cls" className="block mb-1.5 text-sm font-medium text-zinc-300">
-            CLS Threshold
-          </label>
-          <input
-            id="cls"
-            type="number"
-            step="0.01"
-            {...register("cls", { valueAsNumber: true })}
-            className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          {errors.cls && (
-            <p className="mt-1 text-xs text-red-400">{errors.cls.message}</p>
-          )}
+          <label htmlFor="cls" className="block mb-1.5 text-sm font-medium text-zinc-300">CLS Threshold</label>
+          <input id="cls" type="number" step="0.01" {...register("cls", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          {errors.cls && <p className="mt-1 text-xs text-red-400">{errors.cls.message}</p>}
         </div>
-
         <div>
-          <label htmlFor="tbt" className="block mb-1.5 text-sm font-medium text-zinc-300">
-            TBT Threshold (ms)
-          </label>
-          <input
-            id="tbt"
-            type="number"
-            {...register("tbt", { valueAsNumber: true })}
-            className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          {errors.tbt && (
-            <p className="mt-1 text-xs text-red-400">{errors.tbt.message}</p>
-          )}
+          <label htmlFor="tbt" className="block mb-1.5 text-sm font-medium text-zinc-300">TBT Threshold (ms)</label>
+          <input id="tbt" type="number" {...register("tbt", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          {errors.tbt && <p className="mt-1 text-xs text-red-400">{errors.tbt.message}</p>}
         </div>
       </div>
 
       <div>
-        <label htmlFor="maxDomains" className="block mb-1.5 text-sm font-medium text-zinc-300">
-          Max Domains to Analyze
-        </label>
-        <input
-          id="maxDomains"
-          type="number"
-          min={1}
-          max={200}
-          {...register("maxDomains", { valueAsNumber: true })}
-          className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        {errors.maxDomains && (
-          <p className="mt-1 text-xs text-red-400">{errors.maxDomains.message}</p>
-        )}
+        <label htmlFor="maxDomains" className="block mb-1.5 text-sm font-medium text-zinc-300">Max Domains to Analyze</label>
+        <input id="maxDomains" type="number" min={1} max={200} {...register("maxDomains", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        {errors.maxDomains && <p className="mt-1 text-xs text-red-400">{errors.maxDomains.message}</p>}
       </div>
 
-      <div>
-        <label htmlFor="email" className="block mb-1.5 text-sm font-medium text-zinc-300">
-          Report Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          {...register("email")}
-          placeholder="you@example.com"
-          className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white placeholder-zinc-500 border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      {errorMsg && <p className="rounded-md bg-red-900/40 border border-red-700 px-3 py-2 text-sm text-red-300">{errorMsg}</p>}
+
+      {loading && (
+        <ProgressMeter
+          label="Lead search in progress"
+          detail={progress ?? "Initializing pipeline…"}
+          value={overallProgress(progressStage, progress)}
         />
-        {errors.email && (
-          <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>
-        )}
-      </div>
-
-      {errorMsg && (
-        <p className="rounded-md bg-red-900/40 border border-red-700 px-3 py-2 text-sm text-red-300">
-          {errorMsg}
-        </p>
       )}
 
-      {loading && progress && (
-        <div className="rounded-md bg-zinc-800 border border-zinc-700 px-4 py-3 text-sm text-zinc-300">
-          <div className="flex items-center gap-2">
-            <svg className="animate-spin h-4 w-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            <span>{progress}</span>
-          </div>
-        </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-      >
+      <button type="submit" disabled={loading} className="w-full rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
         {loading ? "Running..." : "Run Lead Search"}
       </button>
     </form>
