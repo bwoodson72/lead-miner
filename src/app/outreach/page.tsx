@@ -41,7 +41,7 @@ type RegenerationResult = {
   processed: number;
   succeeded: number;
   failed: number;
-  results?: Array<{ messageId: number; leadId: number; kind: string; success: boolean; action?: string; error?: string }>;
+  results?: Array<{ messageId: number; leadId: number; kind: string; success: boolean; replacementMessageId?: number; action?: string; error?: string }>;
 };
 type OutreachStrategyDetails = {
   version?: string;
@@ -58,6 +58,11 @@ function sequenceLabel(message: Message) {
 }
 function pct(value: number | null) { return value == null ? "—" : `${Math.round(value * 100)}%`; }
 function psychologyLabel(value: string) { return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()); }
+function regenerationRemovalDecision(action: string | undefined) {
+  if (!action?.startsWith("cancelled_after_research_not_eligible")) return null;
+  const decision = action.split(":")[1];
+  return decision ? decision.replaceAll("_", " ") : "not outreach-eligible";
+}
 function parseOutreachStrategyReason(value: string | null): OutreachStrategyDetails | null {
   if (!value) return null;
   try {
@@ -170,8 +175,15 @@ export default function OutreachPage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Regeneration failed");
-      setNotice("Message regenerated with the current research, outreach strategy, and prompt rules.");
+      const removedDecision = regenerationRemovalDecision(body.outcome?.action);
       await load();
+      if (body.message) {
+        setNotice("Message regenerated with the current research, outreach strategy, and prompt rules.");
+      } else if (removedDecision) {
+        setNotice(`${message.lead.businessName || message.lead.domain} was removed from the outreach queue because fresh research no longer qualified it for a custom rebuild (${removedDecision}). No replacement draft was created.`);
+      } else {
+        setNotice(`${message.lead.businessName || message.lead.domain} was removed from the outreach queue during regeneration. No replacement draft was created; check the lead activity for the recorded reason.`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -201,12 +213,16 @@ export default function OutreachPage() {
       const body = await res.json() as RegenerationResult & { error?: string };
       if (!res.ok) throw new Error(body.error ?? "Bulk regeneration failed");
       const failures = body.results?.filter((result) => !result.success) ?? [];
+      const removals = body.results?.filter((result) => result.success && regenerationRemovalDecision(result.action)) ?? [];
       await load();
       if (failures.length) {
         const examples = failures.slice(0, 3).map((result) => `#${result.messageId}: ${result.error ?? "failed"}`).join(" · ");
         setError(`${body.succeeded} regenerated/cancelled; ${body.failed} failed. ${examples}`);
       } else if (body.processed === 0) {
         setNotice(mode === "stale" ? "No stale unsent initial drafts were found." : "No selected messages needed processing.");
+      } else if (removals.length) {
+        const decisions = [...new Set(removals.map((result) => regenerationRemovalDecision(result.action)).filter(Boolean))].join(", ");
+        setNotice(`${body.succeeded} unsent message${body.succeeded === 1 ? "" : "s"} processed. ${removals.length} lead${removals.length === 1 ? " was" : "s were"} removed from the outreach queue because fresh research no longer qualified ${removals.length === 1 ? "it" : "them"} for a custom rebuild${decisions ? ` (${decisions})` : ""}.`);
       } else {
         setNotice(`${body.succeeded} unsent message${body.succeeded === 1 ? "" : "s"} processed with the current outreach rules.`);
       }
