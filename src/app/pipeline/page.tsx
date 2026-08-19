@@ -77,12 +77,18 @@ function StatCard({ label: cardLabel, value, detail }: { label: string; value: n
   );
 }
 
+function Spinner() {
+  return <span aria-hidden="true" className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/35 border-t-white" />;
+}
+
 export default function PipelinePage() {
   const [summary, setSummary] = useState<PipelineSummary | null>(null);
   const [queue, setQueue] = useState<ResearchQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [researchingId, setResearchingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -108,6 +114,24 @@ export default function PipelinePage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  async function researchNow(candidate: ResearchCandidate) {
+    if (researchingId !== null) return;
+    setResearchingId(candidate.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/leads/${candidate.id}/research`, { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `Research failed (${response.status})`);
+      setNotice(`Research completed for ${candidate.businessName || candidate.domain}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setResearchingId(null);
+    }
+  }
+
   if (loading) {
     return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">Loading candidate pipeline…</main>;
   }
@@ -126,7 +150,7 @@ export default function PipelinePage() {
             <button
               type="button"
               onClick={() => void load(true)}
-              disabled={refreshing}
+              disabled={refreshing || researchingId !== null}
               className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm transition-colors hover:bg-zinc-700 disabled:opacity-50"
             >
               {refreshing ? "Refreshing…" : "Refresh"}
@@ -135,7 +159,8 @@ export default function PipelinePage() {
           </div>
         </div>
 
-        {error && <div className="mb-6 rounded border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
+        {notice && <div aria-live="polite" className="mb-6 rounded border border-emerald-900 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">{notice}</div>}
+        {error && <div aria-live="assertive" className="mb-6 rounded border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
 
         {summary && (
           <>
@@ -175,7 +200,7 @@ export default function PipelinePage() {
             <div className="px-5 py-10 text-center text-sm text-zinc-500">No candidates are waiting for AI research.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm">
+              <table className="w-full min-w-[1080px] text-sm">
                 <thead className="text-left text-xs uppercase text-zinc-500">
                   <tr>
                     <th className="px-4 py-3">Rank</th>
@@ -186,46 +211,60 @@ export default function PipelinePage() {
                     <th className="px-4 py-3">Score</th>
                     <th className="px-4 py-3">Score detail</th>
                     <th className="px-4 py-3">Contact</th>
+                    <th className="px-4 py-3">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {queue.candidates.map((candidate, index) => (
-                    <tr key={candidate.id} className="align-top hover:bg-zinc-800/35">
-                      <td className="px-4 py-4 font-mono text-zinc-500">{index + 1}</td>
-                      <td className="px-4 py-4">
-                        <Link href={`/leads/${candidate.id}`} className="font-medium text-white hover:text-indigo-300">
-                          {candidate.businessName || candidate.domain}
-                        </Link>
-                        <div className="mt-1 text-xs text-zinc-500">{candidate.domain}</div>
-                        <div className="mt-1 text-xs text-zinc-600">{candidate.keyword}</div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded border px-2 py-1 text-xs ${candidate.adSource === "paid_ad" ? "border-amber-800 bg-amber-950/35 text-amber-300" : "border-zinc-700 bg-zinc-800 text-zinc-300"}`}>
-                          {sourceLabel(candidate.adSource)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded border px-2 py-1 text-xs capitalize ${performanceClass(candidate.performanceOpportunity)}`}>
-                          {label(candidate.performanceOpportunity)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded border px-2 py-1 text-xs capitalize ${screeningClass(candidate.screeningStatus)}`}>
-                          {label(candidate.screeningStatus)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-lg font-semibold text-white">{candidate.researchQueueScore}</td>
-                      <td className="px-4 py-4 text-xs leading-5 text-zinc-400">
-                        <div>Intent {candidate.researchQueueBreakdown.acquisitionIntent} · Performance {candidate.researchQueueBreakdown.performanceSignal}</div>
-                        <div>Screen {candidate.researchQueueBreakdown.screeningCompleteness} · Identity {candidate.researchQueueBreakdown.listingIdentity}</div>
-                        <div>Age {candidate.researchQueueBreakdown.aging} ({candidate.researchQueueBreakdown.ageDays}d)</div>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-zinc-500">
-                        <div>{candidate.phone ? "Phone known" : "Phone not known"}</div>
-                        <div className="mt-1">Email not required for research</div>
-                      </td>
-                    </tr>
-                  ))}
+                  {queue.candidates.map((candidate, index) => {
+                    const busy = researchingId === candidate.id;
+                    return (
+                      <tr key={candidate.id} className="align-top hover:bg-zinc-800/35">
+                        <td className="px-4 py-4 font-mono text-zinc-500">{index + 1}</td>
+                        <td className="px-4 py-4">
+                          <Link href={`/leads/${candidate.id}`} className="font-medium text-white hover:text-indigo-300">
+                            {candidate.businessName || candidate.domain}
+                          </Link>
+                          <div className="mt-1 text-xs text-zinc-500">{candidate.domain}</div>
+                          <div className="mt-1 text-xs text-zinc-600">{candidate.keyword}</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`rounded border px-2 py-1 text-xs ${candidate.adSource === "paid_ad" ? "border-amber-800 bg-amber-950/35 text-amber-300" : "border-zinc-700 bg-zinc-800 text-zinc-300"}`}>
+                            {sourceLabel(candidate.adSource)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`rounded border px-2 py-1 text-xs capitalize ${performanceClass(candidate.performanceOpportunity)}`}>
+                            {label(candidate.performanceOpportunity)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`rounded border px-2 py-1 text-xs capitalize ${screeningClass(candidate.screeningStatus)}`}>
+                            {label(candidate.screeningStatus)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-lg font-semibold text-white">{candidate.researchQueueScore}</td>
+                        <td className="px-4 py-4 text-xs leading-5 text-zinc-400">
+                          <div>Intent {candidate.researchQueueBreakdown.acquisitionIntent} · Performance {candidate.researchQueueBreakdown.performanceSignal}</div>
+                          <div>Screen {candidate.researchQueueBreakdown.screeningCompleteness} · Identity {candidate.researchQueueBreakdown.listingIdentity}</div>
+                          <div>Age {candidate.researchQueueBreakdown.aging} ({candidate.researchQueueBreakdown.ageDays}d)</div>
+                        </td>
+                        <td className="px-4 py-4 text-xs text-zinc-500">
+                          <div>{candidate.phone ? "Phone known" : "Phone not known"}</div>
+                          <div className="mt-1">Email not required for research</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <button
+                            type="button"
+                            onClick={() => void researchNow(candidate)}
+                            disabled={researchingId !== null}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded bg-indigo-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-600 disabled:cursor-wait disabled:opacity-45"
+                          >
+                            {busy ? <><Spinner />Researching…</> : "Research now"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
