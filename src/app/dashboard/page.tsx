@@ -103,6 +103,8 @@ type BulkProgress = {
   failed?: number;
 };
 
+const BULK_RESEARCH_CONCURRENCY = 2;
+
 const statuses = [
   "",
   "new",
@@ -178,6 +180,13 @@ function Spinner() {
       className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/35 border-t-white"
     />
   );
+}
+
+async function requestLeadResearch(id: number) {
+  const res = await fetch(`/api/leads/${id}/research`, { method: "POST" });
+  const body = await res.json().catch(() => ({ error: `Research request failed with HTTP ${res.status}` }));
+  if (!res.ok) throw new Error(body.error ?? "Research failed");
+  return body;
 }
 
 export default function DashboardPage() {
@@ -371,19 +380,60 @@ export default function DashboardPage() {
   async function researchSelected() {
     if (!selected.size || busy) return;
     const ids = Array.from(selected);
-    startBulk("research", `Research is running on ${ids.length} ${ids.length === 1 ? "lead" : "leads"}…`);
+    startBulk("research", `Research is starting for ${ids.length} ${ids.length === 1 ? "lead" : "leads"}…`);
+
+    let nextIndex = 0;
+    let processed = 0;
+    let succeeded = 0;
+    let failed = 0;
+    const failures: string[] = [];
+
+    const worker = async () => {
+      while (true) {
+        const index = nextIndex++;
+        if (index >= ids.length) return;
+        const id = ids[index]!;
+        const lead = leads.find((item) => item.id === id);
+        const leadName = lead?.businessName || lead?.domain || `lead #${id}`;
+
+        setBulkProgress({
+          detail: `Researching ${leadName}…`,
+          processed,
+          total: ids.length,
+          succeeded,
+          failed,
+        });
+
+        try {
+          await requestLeadResearch(id);
+          succeeded++;
+        } catch (e) {
+          failed++;
+          failures.push(`#${id}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+
+        processed++;
+        setBulkProgress({
+          detail: `${processed} of ${ids.length} leads researched`,
+          processed,
+          total: ids.length,
+          succeeded,
+          failed,
+        });
+      }
+    };
+
     try {
-      const res = await fetch("/api/leads/bulk-research", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Research failed");
-      setNotice(`Research completed for ${ids.length} selected ${ids.length === 1 ? "lead" : "leads"}.`);
-      setRefreshKey((k) => k + 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const workerCount = Math.min(BULK_RESEARCH_CONCURRENCY, ids.length);
+      await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+      if (succeeded > 0) {
+        setNotice(`Research completed for ${succeeded} ${succeeded === 1 ? "lead" : "leads"}.`);
+        setRefreshKey((k) => k + 1);
+      }
+      if (failed > 0) {
+        setError(`${succeeded} researched; ${failed} failed.${failures.length ? ` ${failures.slice(0, 3).join(" · ")}` : ""}`);
+      }
     } finally {
       finishBulk();
     }
@@ -391,10 +441,9 @@ export default function DashboardPage() {
 
   async function researchOne(id: number) {
     setBusy(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/leads/${id}/research`, { method: "POST" });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Research failed");
+      await requestLeadResearch(id);
       setRefreshKey((k) => k + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
