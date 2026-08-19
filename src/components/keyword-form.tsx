@@ -23,6 +23,7 @@ function overallProgress(stage: string | null, detail: string | null) {
   const ratio = count && Number(count[2]) > 0 ? Number(count[1]) / Number(count[2]) : null;
   if (stage === "starting") return 2;
   if (stage === "searching") return 10;
+  if (stage === "persisting") return 15;
   if (stage === "analyzing") return ratio == null ? 25 : 20 + ratio * 35;
   if (stage === "enriching") return ratio == null ? 60 : 55 + ratio * 20;
   if (stage === "saving") return 78;
@@ -165,33 +166,38 @@ export default function KeywordForm({ onResults }: KeywordFormProps) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div>
-          <label htmlFor="performanceScore" className="block mb-1.5 text-sm font-medium text-zinc-300">
-            Min Performance Score
-          </label>
-          <input id="performanceScore" type="number" {...register("performanceScore", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          {errors.performanceScore && <p className="mt-1 text-xs text-red-400">{errors.performanceScore.message}</p>}
+      <div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div>
+            <label htmlFor="performanceScore" className="block mb-1.5 text-sm font-medium text-zinc-300">
+              Performance Score Threshold
+            </label>
+            <input id="performanceScore" type="number" {...register("performanceScore", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            {errors.performanceScore && <p className="mt-1 text-xs text-red-400">{errors.performanceScore.message}</p>}
+          </div>
+          <div>
+            <label htmlFor="lcp" className="block mb-1.5 text-sm font-medium text-zinc-300">LCP Threshold (ms)</label>
+            <input id="lcp" type="number" {...register("lcp", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            {errors.lcp && <p className="mt-1 text-xs text-red-400">{errors.lcp.message}</p>}
+          </div>
+          <div>
+            <label htmlFor="cls" className="block mb-1.5 text-sm font-medium text-zinc-300">CLS Threshold</label>
+            <input id="cls" type="number" step="0.01" {...register("cls", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            {errors.cls && <p className="mt-1 text-xs text-red-400">{errors.cls.message}</p>}
+          </div>
+          <div>
+            <label htmlFor="tbt" className="block mb-1.5 text-sm font-medium text-zinc-300">TBT Threshold (ms)</label>
+            <input id="tbt" type="number" {...register("tbt", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            {errors.tbt && <p className="mt-1 text-xs text-red-400">{errors.tbt.message}</p>}
+          </div>
         </div>
-        <div>
-          <label htmlFor="lcp" className="block mb-1.5 text-sm font-medium text-zinc-300">LCP Threshold (ms)</label>
-          <input id="lcp" type="number" {...register("lcp", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          {errors.lcp && <p className="mt-1 text-xs text-red-400">{errors.lcp.message}</p>}
-        </div>
-        <div>
-          <label htmlFor="cls" className="block mb-1.5 text-sm font-medium text-zinc-300">CLS Threshold</label>
-          <input id="cls" type="number" step="0.01" {...register("cls", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          {errors.cls && <p className="mt-1 text-xs text-red-400">{errors.cls.message}</p>}
-        </div>
-        <div>
-          <label htmlFor="tbt" className="block mb-1.5 text-sm font-medium text-zinc-300">TBT Threshold (ms)</label>
-          <input id="tbt" type="number" {...register("tbt", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          {errors.tbt && <p className="mt-1 text-xs text-red-400">{errors.tbt.message}</p>}
-        </div>
+        <p className="mt-2 text-xs text-zinc-500">
+          These thresholds classify performance signals. Candidates are saved whether performance is strong, moderate, healthy, or unavailable.
+        </p>
       </div>
 
       <div>
-        <label htmlFor="maxDomains" className="block mb-1.5 text-sm font-medium text-zinc-300">Max Domains to Analyze</label>
+        <label htmlFor="maxDomains" className="block mb-1.5 text-sm font-medium text-zinc-300">Max Candidates to Screen</label>
         <input id="maxDomains" type="number" min={1} max={200} {...register("maxDomains", { valueAsNumber: true })} className="w-full rounded-md bg-zinc-700 px-3 py-2 text-sm text-white border border-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         {errors.maxDomains && <p className="mt-1 text-xs text-red-400">{errors.maxDomains.message}</p>}
       </div>
