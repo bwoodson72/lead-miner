@@ -6,7 +6,8 @@ interface ResultsTableProps {
   leads: LeadRecord[];
 }
 
-function scoreColor(score: number): string {
+function scoreColor(score: number | null): string {
+  if (score == null) return "text-zinc-500";
   if (score < 40) return "text-red-400";
   if (score < 60) return "text-orange-400";
   return "text-green-400";
@@ -17,11 +18,16 @@ function formatAdSource(source: string): { label: string; className: string } {
   return { label: "Organic", className: "text-emerald-400" };
 }
 
+function formatPerformanceOpportunity(value: LeadRecord["performanceOpportunity"]) {
+  if (value === "strong") return { label: "Strong", className: "text-red-400" };
+  if (value === "moderate") return { label: "Moderate", className: "text-amber-400" };
+  if (value === "none") return { label: "None", className: "text-emerald-400" };
+  return { label: "Unknown", className: "text-zinc-500" };
+}
+
 export default function ResultsTable({ leads }: ResultsTableProps) {
   if (!leads || leads.length === 0) {
-    return (
-      <p className="text-center text-zinc-400 py-8">No slow sites found.</p>
-    );
+    return <p className="text-center text-zinc-400 py-8">No candidates found.</p>;
   }
 
   return (
@@ -30,6 +36,7 @@ export default function ResultsTable({ leads }: ResultsTableProps) {
         <thead className="bg-zinc-800 text-zinc-400 uppercase text-xs tracking-wider">
           <tr>
             <th className="px-4 py-3">Domain</th>
+            <th className="px-4 py-3">Performance signal</th>
             <th className="px-4 py-3">Score</th>
             <th className="px-4 py-3">LCP</th>
             <th className="px-4 py-3">CLS</th>
@@ -42,29 +49,21 @@ export default function ResultsTable({ leads }: ResultsTableProps) {
         <tbody className="divide-y divide-zinc-700">
           {leads.map((lead, i) => {
             const source = formatAdSource(lead.adSource);
+            const opportunity = formatPerformanceOpportunity(lead.performanceOpportunity);
             return (
               <tr key={i} className="bg-zinc-900 hover:bg-zinc-800/60 transition-colors">
-                <td className="px-4 py-3 font-medium text-white whitespace-nowrap">
-                  {lead.domain}
-                </td>
+                <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{lead.domain}</td>
+                <td className={`px-4 py-3 font-medium ${opportunity.className}`}>{opportunity.label}</td>
                 <td className={`px-4 py-3 font-semibold ${scoreColor(lead.performanceScore)}`}>
-                  {lead.performanceScore}
+                  {lead.performanceScore ?? "—"}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  {(lead.lcp / 1000).toFixed(1)}s
+                  {lead.lcp == null ? "—" : `${(lead.lcp / 1000).toFixed(1)}s`}
                 </td>
-                <td className="px-4 py-3">
-                  {lead.cls.toFixed(2)}
-                </td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {Math.round(lead.tbt)}ms
-                </td>
-                <td className={`px-4 py-3 font-medium ${source.className}`}>
-                  {source.label}
-                </td>
-                <td className="px-4 py-3 text-zinc-400">
-                  {lead.keyword}
-                </td>
+                <td className="px-4 py-3">{lead.cls == null ? "—" : lead.cls.toFixed(2)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">{lead.tbt == null ? "—" : `${Math.round(lead.tbt)}ms`}</td>
+                <td className={`px-4 py-3 font-medium ${source.className}`}>{source.label}</td>
+                <td className="px-4 py-3 text-zinc-400">{lead.keyword}</td>
                 <td className="px-4 py-3 max-w-[200px]">
                   <a
                     href={lead.landingPageUrl}

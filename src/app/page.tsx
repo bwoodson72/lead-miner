@@ -29,10 +29,16 @@ export default function Home() {
   const domainsAnalyzed = diagnostics && typeof diagnostics.pageSpeedResults === "number"
     ? diagnostics.pageSpeedResults
     : null;
+  const candidatesSaved = diagnostics && typeof diagnostics.candidatesSaved === "number"
+    ? diagnostics.candidatesSaved
+    : leads?.length ?? null;
+  const strongPerformanceSignals = diagnostics && typeof diagnostics.performanceStrong === "number"
+    ? diagnostics.performanceStrong
+    : leads?.filter((lead) => lead.performanceOpportunity === "strong").length ?? null;
   const pageSpeedFailures = diagnostics && typeof diagnostics.pageSpeedFailures === "number"
     ? diagnostics.pageSpeedFailures
     : 0;
-  const paidLeads = leads?.filter((lead) => lead.adSource === "paid_ad").length ?? 0;
+  const paidCandidates = leads?.filter((lead) => lead.adSource === "paid_ad").length ?? 0;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -40,7 +46,7 @@ export default function Home() {
         <div className="mb-10">
           <h1 className="text-3xl font-bold tracking-tight text-white">Lead Miner</h1>
           <p className="mt-1.5 text-zinc-400">
-            Find businesses running ads on slow websites
+            Find service businesses with website replacement opportunities
           </p>
         </div>
 
@@ -52,20 +58,24 @@ export default function Home() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
               <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
-                <div className="text-xl font-bold text-white">{domainsAnalyzed ?? "—"}</div>
-                <div className="text-xs text-zinc-500">Domains analyzed</div>
+                <div className="text-xl font-bold text-white">{candidatesSaved ?? "—"}</div>
+                <div className="text-xs text-zinc-500">Candidates saved</div>
               </div>
               <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
-                <div className="text-xl font-bold text-white">{leads.length}</div>
-                <div className="text-xs text-zinc-500">Slow leads returned</div>
+                <div className="text-xl font-bold text-white">{domainsAnalyzed ?? "—"}</div>
+                <div className="text-xs text-zinc-500">PageSpeed analyzed</div>
+              </div>
+              <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
+                <div className="text-xl font-bold text-red-400">{strongPerformanceSignals ?? "—"}</div>
+                <div className="text-xs text-zinc-500">Strong performance signals</div>
               </div>
               <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
                 <div className="text-xl font-bold text-amber-400">{paidAdsFound ?? "—"}</div>
                 <div className="text-xs text-zinc-500">Paid ads discovered</div>
               </div>
               <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
-                <div className="text-xl font-bold text-amber-300">{paidLeads}</div>
-                <div className="text-xs text-zinc-500">Slow paid-ad leads</div>
+                <div className="text-xl font-bold text-amber-300">{paidCandidates}</div>
+                <div className="text-xs text-zinc-500">Paid-ad candidates</div>
               </div>
               <div className="rounded-lg bg-zinc-900 border border-zinc-800 px-4 py-3">
                 <div className="text-xl font-bold text-emerald-400">{organicFound ?? "—"}</div>
@@ -78,7 +88,7 @@ export default function Home() {
               keyword{keywords.length !== 1 ? "s" : ""}
               {pageSpeedFailures > 0 && (
                 <span>
-                  {" "}· <span className="font-semibold text-zinc-300">{pageSpeedFailures}</span> PageSpeed failure{pageSpeedFailures !== 1 ? "s" : ""}
+                  {" "}· <span className="font-semibold text-zinc-300">{pageSpeedFailures}</span> candidate{pageSpeedFailures !== 1 ? "s" : ""} with unavailable PageSpeed data
                 </span>
               )}
               {diagnostics && typeof diagnostics.franchisesFiltered === "number" && diagnostics.franchisesFiltered > 0 && (

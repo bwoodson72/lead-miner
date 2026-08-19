@@ -25,12 +25,15 @@ export const LeadRecordSchema = z.object({
   keyword: z.string(),
   domain: z.string(),
   landingPageUrl: z.string().url(),
-  performanceScore: z.number(),
-  lcp: z.number(),
-  cls: z.number(),
-  tbt: z.number(),
+  performanceScore: z.number().nullable(),
+  lcp: z.number().nullable(),
+  cls: z.number().nullable(),
+  tbt: z.number().nullable(),
   adSource: z.enum(["paid_ad", "local_organic"]),
   timestamp: z.string(),
+  screeningStatus: z.enum(["pending", "complete", "partial", "failed"]).optional(),
+  performanceOpportunity: z.enum(["strong", "moderate", "none", "unknown"]).optional(),
+  lastScreenedAt: z.string().optional(),
 });
 
 export type LeadRecord = z.infer<typeof LeadRecordSchema>;
