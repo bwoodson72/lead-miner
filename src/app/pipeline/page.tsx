@@ -16,10 +16,11 @@ type PipelineSummary = {
 
 type ResearchBreakdown = {
   acquisitionIntent: number;
-  performance: number;
-  screening: number;
+  performanceSignal: number;
+  screeningCompleteness: number;
   listingIdentity: number;
-  age: number;
+  aging: number;
+  ageDays: number;
   total: number;
 };
 
@@ -46,10 +47,6 @@ type ResearchQueueResponse = {
 
 function label(value: string) {
   return value.replaceAll("_", " ");
-}
-
-function ageDays(createdAt: string) {
-  return Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000));
 }
 
 function Spinner() {
@@ -193,14 +190,14 @@ export default function PipelinePage() {
                       <td className="px-4 py-3">
                         <div className="text-lg font-semibold">{candidate.researchQueueScore}</div>
                         <div className="whitespace-nowrap text-[11px] text-zinc-500">
-                          acq {breakdown.acquisitionIntent} · perf {breakdown.performance} · screen {breakdown.screening} · identity {breakdown.listingIdentity} · age {breakdown.age}
+                          acq {breakdown.acquisitionIntent} · perf {breakdown.performanceSignal} · screen {breakdown.screeningCompleteness} · identity {breakdown.listingIdentity} · age {breakdown.aging}
                         </div>
                       </td>
                       <td className="px-4 py-3 capitalize">{candidate.adSource === "paid_ad" ? "Paid ad" : "Organic"}</td>
                       <td className="px-4 py-3 capitalize">{label(candidate.performanceOpportunity)}</td>
                       <td className="px-4 py-3 capitalize">{label(candidate.screeningStatus)}</td>
                       <td className="px-4 py-3 text-zinc-400">{evidence}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{ageDays(candidate.createdAt)}d</td>
+                      <td className="px-4 py-3 whitespace-nowrap">{breakdown.ageDays}d</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-2">
                           <button
