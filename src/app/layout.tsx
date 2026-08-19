@@ -14,6 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <span className="text-sm font-bold tracking-tight text-white">Lead Miner</span>
       <Link href="/" className="text-sm text-zinc-400 transition-colors hover:text-white">Search</Link>
       <Link href="/dashboard" className="text-sm text-zinc-400 transition-colors hover:text-white">Leads</Link>
+      <Link href="/pipeline" className="text-sm text-zinc-400 transition-colors hover:text-white">Pipeline</Link>
       <Link href="/outreach" className="text-sm text-zinc-400 transition-colors hover:text-white">Outreach</Link>
       <Link href="/outreach/queue" className="text-sm text-zinc-400 transition-colors hover:text-white">Queue</Link>
       <Link href="/inbox" className="text-sm text-zinc-400 transition-colors hover:text-white">Inbox</Link>
