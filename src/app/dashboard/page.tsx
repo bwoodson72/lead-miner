@@ -59,6 +59,7 @@ export type Lead = {
     }>;
   }>;
   outreachMessages?: Array<{ kind: string; sequenceNumber: number; status: string }>;
+  aiJobs?: Array<{ status: string }>;
 };
 
 type Operations = {
@@ -160,7 +161,7 @@ function fmt(value: string | null | undefined) {
 
 function researchState(lead: Lead) {
   if (lead.lastResearchedAt) return "researched";
-  if (lead.status === "research_failed") return "failed";
+  if (lead.aiJobs?.[0]?.status === "failed") return "failed";
   return "pending";
 }
 
