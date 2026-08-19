@@ -55,20 +55,34 @@ export default function LeadPipelineState({ leadId }: { leadId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    async function refresh() {
       try {
         const response = await fetch(`/api/leads/${leadId}/pipeline-state`, { cache: "no-store" });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error ?? "Pipeline state failed");
-        if (!cancelled) setState(body as PipelineState);
+        if (!cancelled) {
+          setState(body as PipelineState);
+          setError(null);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       }
-    })();
-    return () => { cancelled = true; };
+    }
+
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 10_000);
+    const onFocus = () => { void refresh(); };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [leadId]);
 
-  if (error) {
+  if (error && !state) {
     return (
       <div className="border-b border-red-950 bg-red-950/20">
         <div className="mx-auto max-w-7xl px-4 py-2 text-xs text-red-300">Pipeline state unavailable: {error}</div>
@@ -108,6 +122,7 @@ export default function LeadPipelineState({ leadId }: { leadId: string }) {
         {state.contactState === "exhausted" && state.emailEnrichmentReason && (
           <p className="mt-1 text-[11px] text-red-300/80">Contact reason: {state.emailEnrichmentReason}</p>
         )}
+        {error && <p className="mt-1 text-[11px] text-amber-300/70">Pipeline refresh warning: {error}</p>}
       </div>
     </div>
   );
