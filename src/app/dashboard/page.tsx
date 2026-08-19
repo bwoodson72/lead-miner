@@ -12,10 +12,12 @@ export type Lead = {
   landingPageUrl: string;
   keyword: string;
   adSource: string;
-  lighthouseScore: number;
-  lcp: number;
+  lighthouseScore: number | null;
+  lcp: number | null;
   cls: number | null;
   tbt: number | null;
+  screeningStatus: string;
+  performanceOpportunity: string;
   email: string | null;
   phone: string | null;
   address: string | null;
@@ -57,6 +59,7 @@ export type Lead = {
     }>;
   }>;
   outreachMessages?: Array<{ kind: string; sequenceNumber: number; status: string }>;
+  aiJobs?: Array<{ status: string }>;
 };
 
 type Operations = {
@@ -84,6 +87,9 @@ type Filters = {
   search: string;
   status: string;
   qualificationDecision: string;
+  performanceOpportunity: string;
+  screeningStatus: string;
+  researchState: string;
   replyStatus: string;
   minPriority: string;
   hasEmail: string;
@@ -133,6 +139,9 @@ const defaultFilters: Filters = {
   search: "",
   status: "",
   qualificationDecision: "",
+  performanceOpportunity: "",
+  screeningStatus: "",
+  researchState: "",
   replyStatus: "",
   minPriority: "",
   hasEmail: "",
@@ -148,6 +157,12 @@ function label(value: string | null | undefined) {
 
 function fmt(value: string | null | undefined) {
   return value ? new Date(value).toLocaleDateString() : "—";
+}
+
+function researchState(lead: Lead) {
+  if (lead.lastResearchedAt) return "researched";
+  if (lead.aiJobs?.[0]?.status === "failed") return "failed";
+  return "pending";
 }
 
 function bulkActionLabel(action: BulkAction | null) {
@@ -239,6 +254,9 @@ export default function DashboardPage() {
     if (filters.search) p.set("search", filters.search);
     if (filters.status) p.set("status", filters.status);
     if (filters.qualificationDecision) p.set("qualificationDecision", filters.qualificationDecision);
+    if (filters.performanceOpportunity) p.set("performanceOpportunity", filters.performanceOpportunity);
+    if (filters.screeningStatus) p.set("screeningStatus", filters.screeningStatus);
+    if (filters.researchState) p.set("researchState", filters.researchState);
     if (filters.replyStatus) p.set("replyStatus", filters.replyStatus);
     if (filters.minPriority) p.set("minPriority", filters.minPriority);
     if (filters.hasEmail) p.set("hasEmail", filters.hasEmail);
@@ -538,19 +556,34 @@ export default function DashboardPage() {
         )}
 
         <section className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="mb-3 text-xs text-zinc-500">Candidate filters are independent of contactability. A missing email never removes a business from website research.</div>
           <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
             <input placeholder="Business, domain, keyword" value={filters.search} onChange={(e) => change("search", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" />
             <select value={filters.status} onChange={(e) => change("status", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
               {statuses.map((v) => <option key={v} value={v}>{v ? label(v) : "All statuses"}</option>)}
             </select>
             <select value={filters.qualificationDecision} onChange={(e) => change("qualificationDecision", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
-              {decisions.map((v) => <option key={v} value={v}>{v ? label(v) : "All decisions"}</option>)}
+              {decisions.map((v) => <option key={v} value={v}>{v ? label(v) : "All qualifications"}</option>)}
+            </select>
+            <select value={filters.performanceOpportunity} onChange={(e) => change("performanceOpportunity", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
+              <option value="">All performance signals</option>
+              {["strong", "moderate", "none", "unknown"].map((v) => <option key={v} value={v}>{label(v)}</option>)}
+            </select>
+            <select value={filters.researchState} onChange={(e) => change("researchState", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
+              <option value="">All research states</option>
+              <option value="pending">Pending</option>
+              <option value="researched">Researched</option>
+              <option value="failed">Failed</option>
+            </select>
+            <select value={filters.screeningStatus} onChange={(e) => change("screeningStatus", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
+              <option value="">All screen states</option>
+              {["pending", "complete", "partial", "failed"].map((v) => <option key={v} value={v}>{label(v)}</option>)}
             </select>
             <select value={filters.replyStatus} onChange={(e) => change("replyStatus", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
               <option value="">All reply states</option>
-              {["interested", "question", "objection", "not_now", "not_interested", "wrong_person", "referral", "out_of_office", "bounce", "unsubscribe", "booking_intent", "other"].map((v) => <option key={v}>{v}</option>)}
+              {["interested", "question", "objection", "not_now", "not_interested", "wrong_person", "referral", "out_of_office", "bounce", "unsubscribe", "booking_intent", "other"].map((v) => <option key={v} value={v}>{label(v)}</option>)}
             </select>
-            <input type="number" min={0} max={100} placeholder="Min priority" value={filters.minPriority} onChange={(e) => change("minPriority", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" />
+            <input type="number" min={0} max={100} placeholder="Min sales priority" value={filters.minPriority} onChange={(e) => change("minPriority", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" />
             <select value={filters.hasEmail} onChange={(e) => change("hasEmail", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
               <option value="">Any contactability</option><option value="true">Has email</option><option value="false">No email</option>
             </select>
@@ -558,7 +591,7 @@ export default function DashboardPage() {
               <option value="">Any acquisition source</option><option value="paid">Paid ads</option>
             </select>
             <select value={filters.sortBy} onChange={(e) => change("sortBy", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
-              {[["priorityScore", "Priority"], ["createdAt", "Created"], ["lcp", "LCP"], ["followUpDate", "Next follow-up"], ["lastOutreachDate", "Last outreach"], ["lastReplyAt", "Last reply"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {[["priorityScore", "Sales priority"], ["createdAt", "Created"], ["lcp", "LCP"], ["followUpDate", "Next follow-up"], ["lastOutreachDate", "Last outreach"], ["lastReplyAt", "Last reply"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
             <select value={filters.sortDir} onChange={(e) => change("sortDir", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
               <option value="desc">Descending</option><option value="asc">Ascending</option>
@@ -616,25 +649,27 @@ export default function DashboardPage() {
         )}
 
         <div className="overflow-x-auto rounded-xl border border-zinc-800">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[1320px] text-left text-sm">
             <thead className="bg-zinc-900 text-xs uppercase text-zinc-500">
               <tr>
                 <th className="px-3 py-3"><input type="checkbox" checked={leads.length > 0 && selected.size === leads.length} onChange={selectPage} /></th>
-                <th className="px-3 py-3">Business</th><th className="px-3 py-3">Priority</th><th className="px-3 py-3">Opportunity</th><th className="px-3 py-3">Asset</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Contact</th><th className="px-3 py-3">Sequence / reply</th><th className="px-3 py-3">Actions</th>
+                <th className="px-3 py-3">Business</th><th className="px-3 py-3">Sales priority</th><th className="px-3 py-3">Site screen</th><th className="px-3 py-3">Qualification</th><th className="px-3 py-3">Asset</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Contact</th><th className="px-3 py-3">Sequence / reply</th><th className="px-3 py-3">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800 bg-zinc-950">
               {loading ? (
-                <tr><td colSpan={9} className="p-10 text-center text-zinc-500">Loading…</td></tr>
+                <tr><td colSpan={10} className="p-10 text-center text-zinc-500">Loading…</td></tr>
               ) : leads.map((lead) => {
                 const assessment = lead.assetAssessments?.[0];
                 const lastMessage = lead.outreachMessages?.[0];
+                const currentResearchState = researchState(lead);
                 return (
                   <tr key={lead.id} className="hover:bg-zinc-900/60">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} /></td>
                     <td className="px-3 py-3"><div className="font-medium text-white">{lead.businessName || lead.domain}</div><div className="text-xs text-zinc-500">{lead.domain} · {lead.keyword}</div></td>
                     <td className="px-3 py-3 text-lg font-semibold">{lead.priorityScore ?? "—"}</td>
-                    <td className="px-3 py-3"><div className="capitalize">{label(lead.qualificationDecision)}</div><div className="text-xs text-zinc-500">{lead.lastResearchedAt ? `researched ${fmt(lead.lastResearchedAt)}` : "not researched"}</div></td>
+                    <td className="px-3 py-3"><div className="capitalize">{label(lead.performanceOpportunity)}</div><div className="text-xs text-zinc-500">screen {label(lead.screeningStatus)} · research {currentResearchState}</div></td>
+                    <td className="px-3 py-3"><div className="capitalize">{label(lead.qualificationDecision)}</div><div className="text-xs text-zinc-500">{lead.lastResearchedAt ? `researched ${fmt(lead.lastResearchedAt)}` : currentResearchState}</div></td>
                     <td className="px-3 py-3 capitalize">{assessment?.assetStrength ?? lead.assetStrength ?? "—"}</td>
                     <td className="px-3 py-3 capitalize">{label(lead.status)}</td>
                     <td className="px-3 py-3"><div>{lead.email ?? "No email"}</div><div className="text-xs text-zinc-500">{lead.phone ?? "No phone"}</div></td>
