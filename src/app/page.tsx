@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import KeywordForm from "@/components/keyword-form";
+import ImportWebsites from "@/components/import-websites";
 import ResultsTable from "@/components/results-table";
 import type { LeadRecord } from "@/lib/schemas";
 
@@ -10,6 +11,7 @@ function diagnosticNumber(diagnostics: Record<string, unknown> | null, key: stri
 }
 
 export default function Home() {
+  const [mode, setMode] = useState<"search" | "import">("search");
   const [leads, setLeads] = useState<LeadRecord[] | null>(null);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
@@ -51,16 +53,21 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
       <div className="mx-auto max-w-6xl px-4 py-12">
-        <div className="mb-10">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-white">Lead Miner</h1>
-          <p className="mt-1.5 text-zinc-400">Find service businesses with website replacement opportunities</p>
+          <p className="mt-1.5 text-zinc-400">Discover or import service businesses and qualify their websites through one candidate pipeline.</p>
+        </div>
+
+        <div className="mb-4 flex gap-2 border-b border-zinc-800">
+          <button onClick={() => setMode("search")} className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === "search" ? "border-indigo-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>Search</button>
+          <button onClick={() => setMode("import")} className={`border-b-2 px-4 py-3 text-sm font-medium transition-colors ${mode === "import" ? "border-indigo-500 text-white" : "border-transparent text-zinc-500 hover:text-zinc-300"}`}>Import URLs</button>
         </div>
 
         <div className="mb-8 rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-          <KeywordForm onResults={handleResults} />
+          {mode === "search" ? <KeywordForm onResults={handleResults} /> : <ImportWebsites />}
         </div>
 
-        {leads !== null && (
+        {mode === "search" && leads !== null && (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {cards.map(([name, value, detail]) => (
