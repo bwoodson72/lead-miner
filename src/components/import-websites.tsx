@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getApiUrl } from "@/lib/env";
 import ProgressMeter from "@/components/progress-meter";
 
 type ImportRow = {
@@ -102,7 +101,6 @@ function sourceLabel(source: ImportBatch["source"]) {
 }
 
 export default function ImportWebsites() {
-  const apiUrl = getApiUrl();
   const [singleUrl, setSingleUrl] = useState("");
   const [singleNotes, setSingleNotes] = useState("");
   const [singleBusy, setSingleBusy] = useState(false);
@@ -118,7 +116,7 @@ export default function ImportWebsites() {
   const [notice, setNotice] = useState<string | null>(null);
 
   async function loadHistory() {
-    const res = await fetch(`${apiUrl}/api/imports?limit=10`, { cache: "no-store" });
+    const res = await fetch("/api/imports?limit=10", { cache: "no-store" });
     if (!res.ok) return;
     const body = await res.json();
     setBatches(body.batches ?? []);
@@ -127,7 +125,7 @@ export default function ImportWebsites() {
   useEffect(() => { void loadHistory(); }, []);
 
   async function requestPreview(rows: ImportRow[], source: "manual_url" | "csv_import", fileName?: string | null) {
-    const res = await fetch(`${apiUrl}/api/imports/preview`, {
+    const res = await fetch("/api/imports/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source, fileName: fileName ?? null, rows }),
@@ -138,7 +136,7 @@ export default function ImportWebsites() {
   }
 
   async function startImport(rows: ImportRow[], source: "manual_url" | "csv_import", fileName?: string | null) {
-    const res = await fetch(`${apiUrl}/api/imports`, {
+    const res = await fetch("/api/imports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source, fileName: fileName ?? null, rows }),
@@ -154,7 +152,7 @@ export default function ImportWebsites() {
     await new Promise<void>((resolve, reject) => {
       const timer = window.setInterval(async () => {
         try {
-          const poll = await fetch(`${apiUrl}/api/jobs/${body.jobId}`, { cache: "no-store" });
+          const poll = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
           const job = await poll.json();
           if (!poll.ok) throw new Error(job.error ?? "Could not check import status");
           if (job.progress) setJobProgress(job.progress);
