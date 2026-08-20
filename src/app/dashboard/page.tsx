@@ -12,6 +12,8 @@ export type Lead = {
   landingPageUrl: string;
   keyword: string;
   adSource: string;
+  discoverySource: string;
+  importBatchId: number | null;
   lighthouseScore: number | null;
   lcp: number | null;
   cls: number | null;
@@ -94,6 +96,8 @@ type Filters = {
   minPriority: string;
   hasEmail: string;
   ads: string;
+  discoverySource: string;
+  importBatchId: string;
   sortBy: string;
   sortDir: string;
   pageSize: number;
@@ -146,6 +150,8 @@ const defaultFilters: Filters = {
   minPriority: "",
   hasEmail: "",
   ads: "",
+  discoverySource: "",
+  importBatchId: "",
   sortBy: "priorityScore",
   sortDir: "desc",
   pageSize: 50,
@@ -261,6 +267,8 @@ export default function DashboardPage() {
     if (filters.minPriority) p.set("minPriority", filters.minPriority);
     if (filters.hasEmail) p.set("hasEmail", filters.hasEmail);
     if (filters.ads === "paid") p.set("ads", "true");
+    if (filters.discoverySource) p.set("discoverySource", filters.discoverySource);
+    if (filters.importBatchId) p.set("importBatchId", filters.importBatchId);
     return p.toString();
   }, [filters, page]);
 
@@ -579,6 +587,13 @@ export default function DashboardPage() {
               <option value="">All screen states</option>
               {["pending", "complete", "partial", "failed"].map((v) => <option key={v} value={v}>{label(v)}</option>)}
             </select>
+            <select value={filters.discoverySource} onChange={(e) => change("discoverySource", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
+              <option value="">All discovery sources</option>
+              <option value="search">Search</option>
+              <option value="manual_url">Single URL</option>
+              <option value="csv_import">CSV import</option>
+            </select>
+            <input type="number" min={1} placeholder="Import batch ID" value={filters.importBatchId} onChange={(e) => change("importBatchId", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm" />
             <select value={filters.replyStatus} onChange={(e) => change("replyStatus", e.target.value)} className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm">
               <option value="">All reply states</option>
               {["interested", "question", "objection", "not_now", "not_interested", "wrong_person", "referral", "out_of_office", "bounce", "unsubscribe", "booking_intent", "other"].map((v) => <option key={v} value={v}>{label(v)}</option>)}
@@ -666,7 +681,7 @@ export default function DashboardPage() {
                 return (
                   <tr key={lead.id} className="hover:bg-zinc-900/60">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} /></td>
-                    <td className="px-3 py-3"><div className="font-medium text-white">{lead.businessName || lead.domain}</div><div className="text-xs text-zinc-500">{lead.domain} · {lead.keyword}</div></td>
+                    <td className="px-3 py-3"><div className="font-medium text-white">{lead.businessName || lead.domain}</div><div className="text-xs text-zinc-500">{lead.domain} · {lead.keyword || "no keyword"} · {label(lead.discoverySource)}{lead.importBatchId ? ` #${lead.importBatchId}` : ""}</div></td>
                     <td className="px-3 py-3 text-lg font-semibold">{lead.priorityScore ?? "—"}</td>
                     <td className="px-3 py-3"><div className="capitalize">{label(lead.performanceOpportunity)}</div><div className="text-xs text-zinc-500">screen {label(lead.screeningStatus)} · research {currentResearchState}</div></td>
                     <td className="px-3 py-3"><div className="capitalize">{label(lead.qualificationDecision)}</div><div className="text-xs text-zinc-500">{lead.lastResearchedAt ? `researched ${fmt(lead.lastResearchedAt)}` : currentResearchState}</div></td>
