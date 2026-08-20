@@ -10,7 +10,7 @@ type Message = { id: number; kind: string; sequenceNumber: number; subject: stri
 type Activity = { id: number; type: string; summary: string; metadata: Record<string, unknown>; createdAt: string };
 type AIJob = { id: number; type: string; status: string; model: string; promptVersion: string; packetHash?: string | null; inputTokens: number | null; cachedTokens?: number | null; outputTokens: number | null; estimatedCost: number | null; error: string | null; startedAt: string | null; completedAt: string | null; createdAt: string };
 type Contact = { id: number; type: string; value: string; role: string | null; source: string | null; verificationStatus: string | null; isPrimary: boolean };
-type Lead = { id: number; domain: string; businessName: string | null; landingPageUrl: string; keyword: string; category: string | null; city: string | null; region: string | null; adSource: string; lighthouseScore: number; lcp: number; cls: number | null; tbt: number | null; email: string | null; phone: string | null; address: string | null; contactPageUrl: string | null; enrichmentStatus: string | null; enrichmentNotes: string | null; emailEnrichmentStatus?: string; isAgencyManaged: boolean; agencyName: string | null; isNationalChain: boolean; chainReason: string | null; status: string; qualificationDecision: string | null; qualificationReason: string | null; priorityScore: number | null; priorityBreakdown?: Record<string, unknown> | null; primaryOutreachAngle: string | null; primaryOutreachAngleReason?: string | null; primaryOutreachAngleConfidence?: number | null; primaryOutreachFindingId?: number | null; researchSummary: string | null; researchVersion: string | null; lastResearchedAt: string | null; assetStrength: string | null; replyStatus: string | null; replySummary: string | null; lastReplyAt: string | null; replyHandledAt?: string | null; revisitAt?: string | null; outreachCount: number; firstContactAt: string | null; lastOutreachDate: string | null; followUpDate: string | null; createdAt: string; updatedAt: string; outreachMessages: Message[]; activities: Activity[]; aiJobs: AIJob[]; suppressions: Array<{ id: number; type: string; value: string; reason: string; createdAt: string }>; contacts: Contact[] };
+type Lead = { id: number; domain: string; businessName: string | null; landingPageUrl: string; keyword: string; category: string | null; city: string | null; region: string | null; adSource: string; lighthouseScore: number; lcp: number; cls: number | null; tbt: number | null; email: string | null; phone: string | null; address: string | null; contactPageUrl: string | null; enrichmentStatus: string | null; enrichmentNotes: string | null; emailEnrichmentStatus?: string; isAgencyManaged: boolean; agencyName: string | null; isNationalChain: boolean; chainReason: string | null; status: string; qualificationDecision: string | null; qualificationReason: string | null; priorityScore: number | null; priorityBreakdown?: Record<string, unknown> | null; primaryOutreachAngle: string | null; primaryOutreachAngleReason?: string | null; primaryOutreachAngleConfidence?: number | null; primaryOutreachFindingId?: number | null; outreachNotes: string | null; outreachNotesUpdatedAt: string | null; researchSummary: string | null; researchVersion: string | null; lastResearchedAt: string | null; assetStrength: string | null; replyStatus: string | null; replySummary: string | null; lastReplyAt: string | null; replyHandledAt?: string | null; revisitAt?: string | null; outreachCount: number; firstContactAt: string | null; lastOutreachDate: string | null; followUpDate: string | null; createdAt: string; updatedAt: string; outreachMessages: Message[]; activities: Activity[]; aiJobs: AIJob[]; suppressions: Array<{ id: number; type: string; value: string; reason: string; createdAt: string }>; contacts: Contact[] };
 type ThreadMessage = { id: string; from: string | null; to?: string | null; subject?: string | null; text: string; internalDate: string };
 type LeadAction = "research" | "prepare" | "revalidate" | "override";
 
@@ -46,7 +46,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [activeAction, setActiveAction] = useState<LeadAction | null>(null);
   const [statusDraft, setStatusDraft] = useState("");
   const [decisionDraft, setDecisionDraft] = useState("");
-  const busy = activeAction !== null;
+  const [outreachNotesDraft, setOutreachNotesDraft] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const busy = activeAction !== null || notesSaving;
 
   useEffect(() => { params.then((p) => setId(p.id)); }, [params]);
 
@@ -61,6 +63,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     setLead(detail.lead);
     setStatusDraft(detail.lead.status);
     setDecisionDraft(detail.lead.qualificationDecision ?? "");
+    setOutreachNotesDraft(detail.lead.outreachNotes ?? "");
     if (researchRes.ok) {
       const r = await researchRes.json();
       setAssessment(r.assetAssessments?.[0] ?? null);
@@ -123,6 +126,28 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   async function revalidate() {
     await act("revalidate", () => fetch(`/api/leads/${id}/enrich-email?force=true`, { method: "POST" }), "Contact revalidation complete. Contact details and identity checks have been refreshed.");
   }
+  async function saveOutreachNotes() {
+    if (!id || notesSaving || activeAction) return;
+    setNotesSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/leads/${id}/outreach-notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outreachNotes: outreachNotesDraft.trim() || null }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Could not save outreach notes");
+      setLead((current) => current ? { ...current, outreachNotes: body.outreachNotes, outreachNotesUpdatedAt: body.outreachNotesUpdatedAt, updatedAt: body.updatedAt } : current);
+      setOutreachNotesDraft(body.outreachNotes ?? "");
+      setNotice(body.outreachNotes ? "Outreach notes saved. New or regenerated outreach will use them." : "Outreach notes cleared.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setNotesSaving(false);
+    }
+  }
 
   if (loading) return <main className="min-h-screen bg-zinc-950 p-8 text-zinc-300">Loading lead…</main>;
   if (error && !lead) return <main className="min-h-screen bg-zinc-950 p-8 text-red-300">{error}</main>;
@@ -131,6 +156,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const selectedFinding = assessment?.findings.find((f) => f.id === lead.primaryOutreachFindingId);
   const breakdown = lead.priorityBreakdown as any;
   const legacyOptimization = lead.qualificationDecision === "optimization_candidate";
+  const notesDirty = outreachNotesDraft.trim() !== (lead.outreachNotes ?? "").trim();
 
   return <main aria-busy={busy} className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-7xl px-4 py-8">
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -156,6 +182,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     {assessment && <><section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-lg font-semibold">Business asset assessment</h2><div className="mt-1 text-xs text-zinc-500">{assessment.researchVersion} · {assessment.model} · {fmt(assessment.createdAt)}</div></div><div className="text-sm text-zinc-400">Confidence {pct(assessment.confidence)}</div></div><div className="mt-4 grid gap-5 lg:grid-cols-2"><div><div className="text-xs uppercase text-zinc-500">Summary</div><p className="mt-2 leading-6 text-zinc-300">{assessment.researchSummary}</p></div><div><div className="text-xs uppercase text-zinc-500">Decision reason</div><p className="mt-2 leading-6 text-zinc-300">{assessment.decisionReason}</p></div></div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Capabilities</h2><div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">{Object.entries(assessment.dimensions).map(([key, d]) => <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4"><div className="flex justify-between gap-3"><span className="font-medium">{dimLabels[key] ?? label(key)}</span><span className="capitalize text-zinc-300">{d.rating}</span></div><p className="mt-3 text-sm leading-6 text-zinc-300">{d.evidence}</p><div className="mt-3 text-xs text-zinc-500">{pct(d.confidence)} · {d.evidenceSources.join(", ")}</div></div>)}</div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Material findings</h2><div className="mt-4 space-y-3">{assessment.findings.length ? assessment.findings.map((f) => <div key={f.id} className={`rounded-lg border p-4 ${f.id === lead.primaryOutreachFindingId ? "border-indigo-700 bg-indigo-950/20" : "border-zinc-800 bg-zinc-950"}`}><div className="flex flex-wrap justify-between gap-2"><div><div className="font-medium">{f.title}</div><div className="text-xs text-zinc-500">{label(f.category)} · {f.significance} significance</div></div><div className="text-sm text-zinc-400">{pct(f.confidence)}</div></div><p className="mt-3 text-sm text-zinc-300">{f.evidence}</p><p className="mt-2 text-sm text-zinc-400">{f.assetCapability}</p><div className="mt-2 text-xs text-zinc-600">Sources: {f.evidenceSources.join(", ")}</div></div>) : <p className="text-zinc-500">No material findings.</p>}</div></section></>}
+
+    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Outreach notes</h2><p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">Private operator context for sales writing. New or regenerated initial outreach, follow-ups, the breakup, and suggested replies use these notes. They do not change AI research or qualification.</p></div>{lead.outreachNotesUpdatedAt && <div className="text-xs text-zinc-600">Updated {fmt(lead.outreachNotesUpdatedAt)}</div>}</div><textarea disabled={busy} maxLength={5000} rows={6} value={outreachNotesDraft} onChange={(e) => setOutreachNotesDraft(e.target.value)} placeholder="Example: Owner is actively promoting commercial roofing on Facebook. Don't lead with speed; focus on the website not reflecting the work they are selling now." className="mt-4 w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-3 text-sm leading-6 text-zinc-200 outline-none transition-colors placeholder:text-zinc-700 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-900 disabled:opacity-50"/><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-zinc-600">{outreachNotesDraft.length}/5000 characters</span><button disabled={busy || !notesDirty} onClick={saveOutreachNotes} className={`${buttonBase} bg-indigo-700 px-4 hover:bg-indigo-600 hover:shadow-indigo-950/40 focus-visible:ring-indigo-300`}>{notesSaving ? <><Spinner />Saving notes…</> : "Save notes"}</button></div></section>
 
     <div className="mb-6 grid gap-6 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Priority & selected outreach angle</h2>{breakdown ? <div className="mt-4 grid grid-cols-2 gap-3 text-sm">{Object.entries(breakdown.scores ?? {}).map(([key, value]) => <div key={key} className="rounded bg-zinc-950 p-3"><div className="text-xs text-zinc-500">{label(key)}</div><div className="mt-1 font-semibold">{String(value)}</div></div>)}</div> : <p className="mt-3 text-sm text-zinc-500">Priority has not been calculated.</p>}<div className="mt-4 text-xs uppercase text-zinc-500">Selected angle</div><p className="mt-2 text-sm leading-6 text-zinc-300">{lead.primaryOutreachAngle ?? "—"}</p>{lead.primaryOutreachAngleReason && <p className="mt-2 text-xs leading-5 text-zinc-500">{lead.primaryOutreachAngleReason}</p>}{selectedFinding && <div className="mt-3 text-xs text-indigo-300">Backed by finding #{selectedFinding.id}: {selectedFinding.title}</div>}</section><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Contact & business identity</h2><div className="mt-4 space-y-2 text-sm"><div>Email: {lead.email ?? "—"}</div><div>Phone: {lead.phone ?? "—"}</div><div>Address: {lead.address ?? "—"}</div><div>Keyword: {lead.keyword}</div><div>Source: {label(lead.adSource)}</div><div>Agency managed: {lead.isAgencyManaged ? lead.agencyName ?? "yes" : "no"}</div><div>National chain: {lead.isNationalChain ? lead.chainReason ?? "yes" : "no"}</div></div>{lead.contacts?.length > 0 && <div className="mt-4 border-t border-zinc-800 pt-3">{lead.contacts.map((c) => <div key={c.id} className="text-xs text-zinc-500">{c.type}: {c.value} · {c.role ?? "unknown role"} · {c.source ?? "unknown source"}</div>)}</div>}</section></div>
 
