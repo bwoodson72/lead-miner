@@ -1,4 +1,5 @@
 import LeadPipelineState from "@/components/lead-pipeline-state";
+import LeadOutreachDraftControls from "@/components/lead-outreach-draft-controls";
 
 export default async function LeadDetailLayout({
   children,
@@ -11,6 +12,7 @@ export default async function LeadDetailLayout({
   return (
     <>
       <LeadPipelineState leadId={id} />
+      <LeadOutreachDraftControls leadId={id} />
       {children}
     </>
   );
