@@ -164,9 +164,7 @@ export default function OutreachPage() {
     }
   }
 
-  async function regenerate(message: Message) {
-    const reason = window.prompt("Why should this message be regenerated?", "Regenerate with current outreach rules");
-    if (!reason) return;
+  async function regenerate(message: Message, instruction: string | null = null) {
     setSaving((p) => new Set(p).add(message.id));
     setError(null);
     setNotice(null);
@@ -174,14 +172,16 @@ export default function OutreachPage() {
       const res = await fetch(`/api/outreach/${message.id}/regenerate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify(instruction ? { instruction } : {}),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Regeneration failed");
       const removedDecision = regenerationRemovalDecision(body.outcome?.action);
       await load();
       if (body.message) {
-        setNotice("Message regenerated with the current research, outreach strategy, and prompt rules.");
+        setNotice(instruction
+          ? "Message regenerated using your one-time instruction plus the current research and outreach safety rules."
+          : "Message regenerated with the current research, outreach strategy, and prompt rules.");
       } else if (removedDecision) {
         setNotice(`${message.lead.businessName || message.lead.domain} was removed from the outreach queue because fresh research no longer qualified it for a custom rebuild (${removedDecision}). No replacement draft was created.`);
       } else {
@@ -192,6 +192,17 @@ export default function OutreachPage() {
     } finally {
       setSaving((p) => { const n = new Set(p); n.delete(message.id); return n; });
     }
+  }
+
+  async function regenerateWithInstruction(message: Message) {
+    const instruction = window.prompt(
+      "How should this version change? This instruction applies only to this regeneration and cannot override evidence or outreach safety rules.",
+      "",
+    );
+    if (instruction === null) return;
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+    await regenerate(message, trimmed);
   }
 
   async function regenerateBulk(mode: "selected" | "stale") {
@@ -427,6 +438,7 @@ export default function OutreachPage() {
                     <button disabled={saving.has(message.id)} onClick={() => patch(message, "approved")} className="rounded bg-emerald-700 px-3 py-2 text-sm disabled:opacity-50">Approve</button>
                     {message.status === "approved" && <button disabled={saving.has(message.id)} onClick={() => send(message)} className="rounded bg-indigo-700 px-3 py-2 text-sm disabled:opacity-50">Send now</button>}
                     <button disabled={saving.has(message.id) || message.kind !== "initial"} onClick={() => regenerate(message)} className="rounded bg-violet-800 px-3 py-2 text-sm disabled:opacity-40">Regenerate</button>
+                    <button disabled={saving.has(message.id) || message.kind !== "initial"} onClick={() => regenerateWithInstruction(message)} className="rounded border border-violet-700 bg-violet-950/50 px-3 py-2 text-sm disabled:opacity-40">Regenerate with instruction</button>
                     <button disabled={saving.has(message.id)} onClick={() => patch(message, "draft")} className="rounded bg-amber-800 px-3 py-2 text-sm disabled:opacity-50">Return to draft</button>
                     <button disabled={saving.has(message.id)} onClick={() => patch(message, "rejected")} className="rounded bg-red-800 px-3 py-2 text-sm disabled:opacity-50">Reject & hold lead</button>
                   </div>
