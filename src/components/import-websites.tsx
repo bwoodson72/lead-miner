@@ -48,6 +48,13 @@ type ImportBatch = {
   pipeline: { total: number; researched: number; rebuildCandidates: number; hasEmail: number; outreachReady: number };
 };
 
+type ImportJob = {
+  status: string;
+  error?: string | null;
+  progress?: { stage: string; detail: string } | null;
+  diagnostics?: { createdLeadIds?: number[]; researchResults?: Array<{ id: number; success: boolean; decision?: string }> } | null;
+};
+
 function parseCsv(text: string) {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -100,11 +107,16 @@ function sourceLabel(source: ImportBatch["source"]) {
   return source === "csv_import" ? "CSV" : "Single URL";
 }
 
+function decisionLabel(value: string | null | undefined) {
+  return value ? value.replaceAll("_", " ") : "qualification complete";
+}
+
 export default function ImportWebsites() {
   const [singleUrl, setSingleUrl] = useState("");
   const [singleNotes, setSingleNotes] = useState("");
   const [singleBusy, setSingleBusy] = useState(false);
   const [singleResult, setSingleResult] = useState<Preview | null>(null);
+  const [singleLeadId, setSingleLeadId] = useState<number | null>(null);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [csvData, setCsvData] = useState<ImportRow[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -146,24 +158,26 @@ export default function ImportWebsites() {
     if (!body.jobId) {
       setNotice(body.message ?? "No new candidates to import.");
       await loadHistory();
-      return;
+      return null;
     }
-    setJobProgress({ stage: "starting", detail: "Initializing website import…" });
-    await new Promise<void>((resolve, reject) => {
+    setJobProgress({ stage: "starting", detail: source === "manual_url" ? "Adding, screening, and qualifying website…" : "Initializing website import…" });
+    return await new Promise<ImportJob>((resolve, reject) => {
       const timer = window.setInterval(async () => {
         try {
           const poll = await fetch(`/api/jobs/${body.jobId}`, { cache: "no-store" });
-          const job = await poll.json();
+          const job = await poll.json() as ImportJob;
           if (!poll.ok) throw new Error(job.error ?? "Could not check import status");
           if (job.progress) setJobProgress(job.progress);
           if (job.status === "complete") {
             window.clearInterval(timer);
             setNotice(job.progress?.detail ?? "Website import complete.");
             await loadHistory();
-            resolve();
+            resolve(job);
           } else if (job.status === "failed") {
             window.clearInterval(timer);
-            reject(new Error(job.error ?? "Website import failed"));
+            const leadId = job.diagnostics?.createdLeadIds?.[0];
+            if (leadId) setSingleLeadId(leadId);
+            reject(new Error(job.error ?? job.progress?.detail ?? "Website import failed"));
           }
         } catch (e) {
           window.clearInterval(timer);
@@ -173,18 +187,32 @@ export default function ImportWebsites() {
     });
   }
 
+  async function qualifyExistingLead(id: number) {
+    setSingleLeadId(id);
+    setJobProgress({ stage: "researching", detail: `Researching and qualifying existing lead #${id}…` });
+    const res = await fetch(`/api/leads/${id}/research`, { method: "POST", cache: "no-store" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? "Existing lead qualification failed");
+    const decision = body.lead?.qualificationDecision as string | null | undefined;
+    setNotice(`Lead #${id} — ${decisionLabel(decision)}.`);
+    await loadHistory();
+  }
+
   async function addSingle() {
     if (!singleUrl.trim() || singleBusy) return;
-    setSingleBusy(true); setError(null); setNotice(null); setSingleResult(null);
+    setSingleBusy(true); setError(null); setNotice(null); setSingleResult(null); setSingleLeadId(null);
     const rows: ImportRow[] = [{ website: singleUrl.trim(), myNotes: singleNotes.trim() || null }];
     try {
       const checked = await requestPreview(rows, "manual_url");
       setSingleResult(checked);
       if (checked.summary.ready === 1) {
-        await startImport(rows, "manual_url");
+        const job = await startImport(rows, "manual_url");
+        const leadId = job?.diagnostics?.createdLeadIds?.[0] ?? null;
+        if (leadId) setSingleLeadId(leadId);
         setSingleUrl(""); setSingleNotes("");
-      } else if (checked.summary.existing === 1) {
-        setNotice("That website is already in Lead Miner.");
+      } else if (checked.summary.existing === 1 && checked.rows[0]?.existingLeadId) {
+        await qualifyExistingLead(checked.rows[0].existingLeadId);
+        setSingleUrl(""); setSingleNotes("");
       }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setSingleBusy(false); setJobProgress(null); }
@@ -217,21 +245,22 @@ export default function ImportWebsites() {
   return <div className="space-y-8">
     {notice && <div className="rounded border border-emerald-800 bg-emerald-950/35 px-4 py-3 text-sm text-emerald-300">{notice}</div>}
     {error && <div className="rounded border border-red-800 bg-red-950/35 px-4 py-3 text-sm text-red-300">{error}</div>}
+    {singleLeadId && <div className="text-sm"><Link className="font-medium text-indigo-300 underline" href={`/leads/${singleLeadId}`}>View Lead #{singleLeadId}</Link></div>}
 
     <section>
       <h2 className="font-semibold text-white">Add one website</h2>
-      <p className="mt-1 text-sm text-zinc-400">Add a domain directly. Lead Miner will save it as a candidate, screen the site, and let the normal research queue qualify it.</p>
+      <p className="mt-1 text-sm text-zinc-400">Add a domain directly. Lead Miner will save it, screen the site, run AI research, and return a qualification decision before this action finishes.</p>
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
         <input value={singleUrl} onChange={(e) => setSingleUrl(e.target.value)} placeholder="examplecontractor.com" className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder:text-zinc-600" />
-        <button disabled={singleBusy || !singleUrl.trim()} onClick={addSingle} className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50">{singleBusy ? "Adding…" : "Add & Qualify"}</button>
+        <button disabled={singleBusy || !singleUrl.trim()} onClick={addSingle} className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50">{singleBusy ? "Qualifying…" : "Add & Qualify"}</button>
       </div>
       <textarea value={singleNotes} maxLength={5000} rows={3} onChange={(e) => setSingleNotes(e.target.value)} placeholder="My Notes (optional) — used for later outreach writing, not qualification" className="mt-3 w-full resize-y rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder:text-zinc-600" />
-      {singleResult?.rows[0]?.status === "existing" && singleResult.rows[0].existingLeadId && <div className="mt-3 text-sm text-amber-300">Already exists — <Link className="underline" href={`/leads/${singleResult.rows[0].existingLeadId}`}>Lead #{singleResult.rows[0].existingLeadId}</Link></div>}
+      {singleResult?.rows[0]?.status === "existing" && singleResult.rows[0].existingLeadId && <div className="mt-3 text-sm text-amber-300">Existing lead detected — Lead Miner will run qualification on <Link className="underline" href={`/leads/${singleResult.rows[0].existingLeadId}`}>Lead #{singleResult.rows[0].existingLeadId}</Link>.</div>}
     </section>
 
     <section className="border-t border-zinc-800 pt-7">
       <h2 className="font-semibold text-white">Import a CSV</h2>
-      <p className="mt-1 text-sm text-zinc-400">Required column: <code>website</code>. Optional: <code>business_name</code>, <code>keyword</code>, <code>city</code>, <code>region</code>, <code>my_notes</code>. A generic <code>notes</code> column is intentionally ignored.</p>
+      <p className="mt-1 text-sm text-zinc-400">Required column: <code>website</code>. Optional: <code>business_name</code>, <code>keyword</code>, <code>city</code>, <code>region</code>, <code>my_notes</code>. CSV candidates are screened and then enter the normal research queue. A generic <code>notes</code> column is intentionally ignored.</p>
       <input type="file" accept=".csv,text/csv" disabled={previewBusy || importBusy} onChange={(e) => void chooseCsv(e.target.files?.[0] ?? null)} className="mt-4 block w-full rounded border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-300" />
       {previewBusy && <div className="mt-4 text-sm text-zinc-400">Validating CSV…</div>}
 
@@ -247,11 +276,11 @@ export default function ImportWebsites() {
       </div>}
     </section>
 
-    {jobProgress && <ProgressMeter label="Website import in progress" detail={jobProgress.detail} />}
+    {jobProgress && <ProgressMeter label={jobProgress.stage === "researching" ? "Qualification in progress" : "Website import in progress"} detail={jobProgress.detail} />}
 
     <section className="border-t border-zinc-800 pt-7">
       <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Recent imports</h2><p className="mt-1 text-sm text-zinc-500">Batch IDs can be used from the dashboard filter.</p></div><button onClick={() => void loadHistory()} className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300">Refresh</button></div>
-      <div className="mt-4 space-y-2">{batches.length ? batches.map((batch) => <div key={batch.id} className="rounded border border-zinc-800 bg-zinc-950 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><div className="font-medium">Batch #{batch.id} · {sourceLabel(batch.source)}{batch.fileName ? ` · ${batch.fileName}` : ""}</div><div className="text-xs capitalize text-zinc-500">{batch.status}</div></div><div className="mt-2 text-xs text-zinc-500">{batch.createdLeads} added · {batch.existingRows} existing · {batch.duplicateRows} duplicate · {batch.invalidRows} invalid · {batch.franchiseRows} franchise · {batch.pipeline.researched} researched · {batch.pipeline.rebuildCandidates} rebuild candidates</div></div>) : <div className="text-sm text-zinc-500">No imports yet.</div>}</div>
+      <div className="mt-4 space-y-2">{batches.length ? batches.map((batch) => <div key={batch.id} className="rounded border border-zinc-800 bg-zinc-950 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><div className="font-medium">Batch #{batch.id} · {sourceLabel(batch.source)}{batch.fileName ? ` · ${batch.fileName}` : ""}</div><div className="text-xs capitalize text-zinc-500">{batch.status.replaceAll("_", " ")}</div></div><div className="mt-2 text-xs text-zinc-500">{batch.createdLeads} added · {batch.existingRows} existing · {batch.duplicateRows} duplicate · {batch.invalidRows} invalid · {batch.franchiseRows} franchise · {batch.pipeline.researched} researched · {batch.pipeline.rebuildCandidates} rebuild candidates</div></div>) : <div className="text-sm text-zinc-500">No imports yet.</div>}</div>
     </section>
   </div>;
 }
