@@ -12,7 +12,9 @@ type AIJob = { id: number; type: string; status: string; model: string; promptVe
 type Contact = { id: number; type: string; value: string; role: string | null; source: string | null; verificationStatus: string | null; isPrimary: boolean };
 type Lead = { id: number; domain: string; businessName: string | null; landingPageUrl: string; keyword: string; category: string | null; city: string | null; region: string | null; adSource: string; lighthouseScore: number; lcp: number; cls: number | null; tbt: number | null; email: string | null; phone: string | null; address: string | null; contactPageUrl: string | null; enrichmentStatus: string | null; enrichmentNotes: string | null; emailEnrichmentStatus?: string; isAgencyManaged: boolean; agencyName: string | null; isNationalChain: boolean; chainReason: string | null; status: string; qualificationDecision: string | null; qualificationReason: string | null; priorityScore: number | null; priorityBreakdown?: Record<string, unknown> | null; primaryOutreachAngle: string | null; primaryOutreachAngleReason?: string | null; primaryOutreachAngleConfidence?: number | null; primaryOutreachFindingId?: number | null; outreachNotes: string | null; outreachNotesUpdatedAt: string | null; researchSummary: string | null; researchVersion: string | null; lastResearchedAt: string | null; assetStrength: string | null; replyStatus: string | null; replySummary: string | null; lastReplyAt: string | null; replyHandledAt?: string | null; revisitAt?: string | null; outreachCount: number; firstContactAt: string | null; lastOutreachDate: string | null; followUpDate: string | null; createdAt: string; updatedAt: string; outreachMessages: Message[]; activities: Activity[]; aiJobs: AIJob[]; suppressions: Array<{ id: number; type: string; value: string; reason: string; createdAt: string }>; contacts: Contact[] };
 type ThreadMessage = { id: string; from: string | null; to?: string | null; subject?: string | null; text: string; internalDate: string };
-type LeadAction = "research" | "prepare" | "revalidate" | "override";
+type LeadAction = "research" | "prepare" | "revalidate" | "override" | "selection";
+
+type AngleMeta = { selectionSource: "auto" | "operator" | "operator_notes"; rationale: string | null };
 
 const dimLabels: Record<string, string> = { performanceEffectiveness: "Performance effectiveness", demandAlignment: "Demand alignment", businessRepresentation: "Business representation", customerActionCapability: "Customer-action capability", acquisitionReadiness: "Acquisition readiness", siteMaturity: "Site maturity" };
 const actionLabels: Record<LeadAction, string> = {
@@ -20,12 +22,14 @@ const actionLabels: Record<LeadAction, string> = {
   prepare: "Preparing outreach…",
   revalidate: "Revalidating contact…",
   override: "Saving override…",
+  selection: "Updating outreach basis…",
 };
 const actionDetails: Record<LeadAction, string> = {
   research: "Refreshing the business-asset assessment, findings, and qualification data.",
-  prepare: "Creating the initial outreach draft from the qualified research finding or saved My Notes.",
+  prepare: "Creating the initial outreach draft from the selected research finding or saved My Notes.",
   revalidate: "Checking the stored contact against the current business identity and site evidence.",
   override: "Saving the lead lifecycle and qualification changes.",
+  selection: "Changing what the outreach writer should lead with without changing research or qualification.",
 };
 const buttonBase = "inline-flex items-center justify-center gap-2 rounded px-3 py-2 text-sm font-medium transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 active:translate-y-0.5 active:shadow-sm disabled:cursor-wait disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-none";
 const linkBase = "rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-zinc-600 hover:bg-zinc-700 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 active:translate-y-0.5 active:shadow-sm";
@@ -34,6 +38,19 @@ function label(v: string | null | undefined) { if (v === "optimization_candidate
 function fmt(v: string | null | undefined) { return v ? new Date(v).toLocaleString() : "—"; }
 function pct(v: number | null | undefined) { return v == null ? "—" : `${Math.round(v * 100)}%`; }
 function Spinner() { return <span aria-hidden="true" className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/35 border-t-white" />; }
+function angleMeta(value: string | null | undefined): AngleMeta {
+  if (!value) return { selectionSource: "auto", rationale: null };
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const source = parsed.selectionSource;
+    return {
+      selectionSource: source === "operator" || source === "operator_notes" ? source : "auto",
+      rationale: typeof parsed.rationale === "string" ? parsed.rationale : null,
+    };
+  } catch {
+    return { selectionSource: "auto", rationale: value };
+  }
+}
 
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string | null>(null);
@@ -126,6 +143,23 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   async function revalidate() {
     await act("revalidate", () => fetch(`/api/leads/${id}/enrich-email?force=true`, { method: "POST" }), "Contact revalidation complete. Contact details and identity checks have been refreshed.");
   }
+  async function changeOutreachSelection(value: string) {
+    const payload = value === "auto"
+      ? { mode: "auto" }
+      : value === "notes"
+        ? { mode: "notes" }
+        : { mode: "finding", findingId: Number(value.replace("finding:", "")) };
+    const success = value === "auto"
+      ? "Outreach selection reset to automatic. The next preparation will reselect the angle."
+      : value === "notes"
+        ? "My Notes will be the primary basis for the next outreach draft."
+        : "That research finding is now locked as the primary outreach basis.";
+    await act("selection", () => fetch(`/api/leads/${id}/outreach-selection`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }), success);
+  }
   async function saveOutreachNotes() {
     if (!id || notesSaving || activeAction) return;
     setNotesSaving(true);
@@ -141,7 +175,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       if (!res.ok) throw new Error(body.error ?? "Could not save My Notes");
       setLead((current) => current ? { ...current, outreachNotes: body.outreachNotes, outreachNotesUpdatedAt: body.outreachNotesUpdatedAt, updatedAt: body.updatedAt } : current);
       setOutreachNotesDraft(body.outreachNotes ?? "");
-      setNotice(body.outreachNotes ? "My Notes saved. They will be used in new or regenerated outreach copy." : "My Notes cleared.");
+      setNotice(body.outreachNotes ? "My Notes saved. They will guide outreach selection and new or regenerated copy." : "My Notes cleared.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -160,6 +194,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const hasSavedOutreachNotes = Boolean((lead.outreachNotes ?? "").trim());
   const manualOutreachFromNotes = lead.qualificationDecision !== "rebuild_candidate" && hasSavedOutreachNotes;
   const canPrepareOutreach = Boolean(lead.email) && (lead.qualificationDecision === "rebuild_candidate" || hasSavedOutreachNotes);
+  const currentAngleMeta = angleMeta(lead.primaryOutreachAngleReason);
+  const outreachSelectionValue = currentAngleMeta.selectionSource === "operator_notes"
+    ? "notes"
+    : currentAngleMeta.selectionSource === "operator" && lead.primaryOutreachFindingId
+      ? `finding:${lead.primaryOutreachFindingId}`
+      : "auto";
 
   return <main aria-busy={busy} className="min-h-screen bg-zinc-950 text-white"><div className="mx-auto max-w-7xl px-4 py-8">
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -186,9 +226,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Capabilities</h2><div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">{Object.entries(assessment.dimensions).map(([key, d]) => <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4"><div className="flex justify-between gap-3"><span className="font-medium">{dimLabels[key] ?? label(key)}</span><span className="capitalize text-zinc-300">{d.rating}</span></div><p className="mt-3 text-sm leading-6 text-zinc-300">{d.evidence}</p><div className="mt-3 text-xs text-zinc-500">{pct(d.confidence)} · {d.evidenceSources.join(", ")}</div></div>)}</div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Material findings</h2><div className="mt-4 space-y-3">{assessment.findings.length ? assessment.findings.map((f) => <div key={f.id} className={`rounded-lg border p-4 ${f.id === lead.primaryOutreachFindingId ? "border-indigo-700 bg-indigo-950/20" : "border-zinc-800 bg-zinc-950"}`}><div className="flex flex-wrap justify-between gap-2"><div><div className="font-medium">{f.title}</div><div className="text-xs text-zinc-500">{label(f.category)} · {f.significance} significance</div></div><div className="text-sm text-zinc-400">{pct(f.confidence)}</div></div><p className="mt-3 text-sm text-zinc-300">{f.evidence}</p><p className="mt-2 text-sm text-zinc-400">{f.assetCapability}</p><div className="mt-2 text-xs text-zinc-600">Sources: {f.evidenceSources.join(", ")}</div></div>) : <p className="text-zinc-500">No material findings.</p>}</div></section></>}
 
-    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">My Notes</h2><p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">Your persistent notes about this lead. They are available to initial outreach, follow-ups, the breakup message, regeneration, and suggested replies. They do not affect research, qualification, priority, or the stored qualification decision. If research did not qualify the lead, saved My Notes can be used as the factual basis for a manually prepared outreach draft.</p></div>{lead.outreachNotesUpdatedAt && <div className="text-xs text-zinc-600">Updated {fmt(lead.outreachNotesUpdatedAt)}</div>}</div><textarea disabled={busy} maxLength={5000} rows={6} value={outreachNotesDraft} onChange={(e) => setOutreachNotesDraft(e.target.value)} placeholder="Example: Owner is actively promoting commercial roofing on Facebook. Don't lead with speed; focus on the website not reflecting the work they are selling now." className="mt-4 w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-3 text-sm leading-6 text-zinc-200 outline-none transition-colors placeholder:text-zinc-700 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-900 disabled:opacity-50"/><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-zinc-600">{outreachNotesDraft.length}/5000 characters</span><button disabled={busy || !notesDirty} onClick={saveOutreachNotes} className={`${buttonBase} bg-indigo-700 px-4 hover:bg-indigo-600 hover:shadow-indigo-950/40 focus-visible:ring-indigo-300`}>{notesSaving ? <><Spinner />Saving My Notes…</> : "Save My Notes"}</button></div></section>
+    <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">My Notes</h2><p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">Your notes guide outreach selection and wording, but they do not change research, qualification, priority, or the stored qualification decision. If they contradict research for prospect-facing outreach, they are treated as authoritative. You can also choose My Notes as the primary outreach basis below.</p></div>{lead.outreachNotesUpdatedAt && <div className="text-xs text-zinc-600">Updated {fmt(lead.outreachNotesUpdatedAt)}</div>}</div><textarea disabled={busy} maxLength={5000} rows={6} value={outreachNotesDraft} onChange={(e) => setOutreachNotesDraft(e.target.value)} placeholder="Example: Owner is actively promoting commercial roofing on Facebook. Don't lead with speed; focus on the website not reflecting the work they are selling now." className="mt-4 w-full resize-y rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-3 text-sm leading-6 text-zinc-200 outline-none transition-colors placeholder:text-zinc-700 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-900 disabled:opacity-50"/><div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-zinc-600">{outreachNotesDraft.length}/5000 characters</span><button disabled={busy || !notesDirty} onClick={saveOutreachNotes} className={`${buttonBase} bg-indigo-700 px-4 hover:bg-indigo-600 hover:shadow-indigo-950/40 focus-visible:ring-indigo-300`}>{notesSaving ? <><Spinner />Saving My Notes…</> : "Save My Notes"}</button></div></section>
 
-    <div className="mb-6 grid gap-6 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Priority & selected outreach angle</h2>{breakdown ? <div className="mt-4 grid grid-cols-2 gap-3 text-sm">{Object.entries(breakdown.scores ?? {}).map(([key, value]) => <div key={key} className="rounded bg-zinc-950 p-3"><div className="text-xs text-zinc-500">{label(key)}</div><div className="mt-1 font-semibold">{String(value)}</div></div>)}</div> : <p className="mt-3 text-sm text-zinc-500">Priority has not been calculated.</p>}<div className="mt-4 text-xs uppercase text-zinc-500">Selected angle</div><p className="mt-2 text-sm leading-6 text-zinc-300">{lead.primaryOutreachAngle ?? "—"}</p>{lead.primaryOutreachAngleReason && <p className="mt-2 text-xs leading-5 text-zinc-500">{lead.primaryOutreachAngleReason}</p>}{selectedFinding && <div className="mt-3 text-xs text-indigo-300">Backed by finding #{selectedFinding.id}: {selectedFinding.title}</div>}</section><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Contact & business identity</h2><div className="mt-4 space-y-2 text-sm"><div>Email: {lead.email ?? "—"}</div><div>Phone: {lead.phone ?? "—"}</div><div>Address: {lead.address ?? "—"}</div><div>Keyword: {lead.keyword}</div><div>Source: {label(lead.adSource)}</div><div>Agency managed: {lead.isAgencyManaged ? lead.agencyName ?? "yes" : "no"}</div><div>National chain: {lead.isNationalChain ? lead.chainReason ?? "yes" : "no"}</div></div>{lead.contacts?.length > 0 && <div className="mt-4 border-t border-zinc-800 pt-3">{lead.contacts.map((c) => <div key={c.id} className="text-xs text-zinc-500">{c.type}: {c.value} · {c.role ?? "unknown role"} · {c.source ?? "unknown source"}</div>)}</div>}</section></div>
+    <div className="mb-6 grid gap-6 lg:grid-cols-2"><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Priority & selected outreach angle</h2>{breakdown ? <div className="mt-4 grid grid-cols-2 gap-3 text-sm">{Object.entries(breakdown.scores ?? {}).map(([key, value]) => <div key={key} className="rounded bg-zinc-950 p-3"><div className="text-xs text-zinc-500">{label(key)}</div><div className="mt-1 font-semibold">{String(value)}</div></div>)}</div> : <p className="mt-3 text-sm text-zinc-500">Priority has not been calculated.</p>}<div className="mt-4"><label className="text-xs uppercase text-zinc-500" htmlFor="outreach-basis">Outreach basis</label><select id="outreach-basis" disabled={busy} value={outreachSelectionValue} onChange={(e) => void changeOutreachSelection(e.target.value)} className="mt-2 w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-900 disabled:opacity-50"><option value="auto">Automatic — prefer meaningful non-performance findings</option><option value="notes" disabled={!hasSavedOutreachNotes}>Use My Notes as primary basis</option>{assessment?.findings.map((finding) => <option key={finding.id} value={`finding:${finding.id}`}>Use finding #{finding.id}: {finding.title}</option>)}</select><p className="mt-2 text-xs leading-5 text-zinc-500">This changes what outreach leads with. It does not change the research decision or qualification.</p></div><div className="mt-4 text-xs uppercase text-zinc-500">Selected angle</div><p className="mt-2 text-sm leading-6 text-zinc-300">{lead.primaryOutreachAngle ?? "Automatic selection will run when outreach is prepared."}</p>{currentAngleMeta.rationale && <p className="mt-2 text-xs leading-5 text-zinc-500">{currentAngleMeta.rationale}</p>}{selectedFinding && <div className="mt-3 text-xs text-indigo-300">Backed by finding #{selectedFinding.id}: {selectedFinding.title}</div>}{currentAngleMeta.selectionSource !== "auto" && <div className="mt-2 text-xs font-medium text-amber-300">Operator override active</div>}</section><section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Contact & business identity</h2><div className="mt-4 space-y-2 text-sm"><div>Email: {lead.email ?? "—"}</div><div>Phone: {lead.phone ?? "—"}</div><div>Address: {lead.address ?? "—"}</div><div>Keyword: {lead.keyword}</div><div>Source: {label(lead.adSource)}</div><div>Agency managed: {lead.isAgencyManaged ? lead.agencyName ?? "yes" : "no"}</div><div>National chain: {lead.isNationalChain ? lead.chainReason ?? "yes" : "no"}</div></div>{lead.contacts?.length > 0 && <div className="mt-4 border-t border-zinc-800 pt-3">{lead.contacts.map((c) => <div key={c.id} className="text-xs text-zinc-500">{c.type}: {c.value} · {c.role ?? "unknown role"} · {c.source ?? "unknown source"}</div>)}</div>}</section></div>
 
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Outreach sequence</h2><div className="mt-4 space-y-3">{lead.outreachMessages.length ? lead.outreachMessages.map((m) => <div key={m.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4"><div className="flex flex-wrap justify-between gap-2"><div className="font-medium">{m.kind === "initial" ? "Initial" : m.sequenceNumber === 5 ? "Follow-up 4 · breakup" : `Follow-up ${m.sequenceNumber - 1}`} · {m.subject}</div><span className="text-xs capitalize text-zinc-400">{m.status}</span></div><div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{m.bodyText}</div><div className="mt-2 text-xs text-zinc-600">Generated {fmt(m.generatedAt)} · Sent {fmt(m.sentAt)}{m.scheduledAt ? ` · Scheduled ${fmt(m.scheduledAt)}` : ""}{m.sendError ? ` · Error: ${m.sendError}` : ""}</div></div>) : <p className="text-zinc-500">No outreach messages yet.</p>}</div></section>
     <section className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5"><h2 className="font-semibold">Gmail thread</h2><div className="mt-4 space-y-3">{thread.length ? thread.map((m) => <div key={m.id} className="rounded border border-zinc-800 bg-zinc-950 p-4"><div className="text-xs text-zinc-500">{m.from ?? "Unknown sender"} · {fmt(m.internalDate)}</div><div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{m.text}</div></div>) : <p className="text-zinc-500">No Gmail thread yet.</p>}</div></section>
