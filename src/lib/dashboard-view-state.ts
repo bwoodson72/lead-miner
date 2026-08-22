@@ -1,4 +1,4 @@
-export const DASHBOARD_VIEW_STORAGE_KEY = "lead-miner:dashboard-view-v1";
+export const DASHBOARD_VIEW_STORAGE_KEY = "lead-miner:dashboard-view-v2";
 
 type StoredDashboardView<T> = {
   filters: T;
